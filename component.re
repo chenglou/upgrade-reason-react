@@ -1,8 +1,12 @@
-let asd = self.reduce(foo);
+let asd = self.reduce(fooa);
 
 let asd = self.reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(() => Foo);
 
 self.reduce(foo, ());
+
+() => self.reduce(foo, ());
+
+reduce(foo, ());
 
 let asd =
   self.reduce(() => {
@@ -11,6 +15,8 @@ let asd =
   });
 
 let asd = self.reduce((_) => Foo);
+
+let asd = () => self.send(FooThisShouldntChange);
 
 let asd =
   self.reduce((a) => {
@@ -33,3 +39,9 @@ let asd = self.ReasonReact.reduce((a) => Foo(a));
 let asd = reduce(bar);
 
 let asd = reduce((_) => Foo);
+
+foo(reduce((_) => DesktopNotifsDenied));
+
+let handleNotificationsChange = (_event, {ReasonReact.state, reduce}) =>
+  /* foo(bar, reduce((_) => DesktopNotifsDenied)); */
+  foo(bar, reduce((_) => DesktopNotifsDenied));
