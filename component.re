@@ -1,30 +1,35 @@
-let asd12 = self.reduce(fooa);
+let asd12 = self.reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(fooa);
 
-let asd = self.reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(() => Foo);
+let asd = () => self.send(Foo);
 
-self.reduce(foo, ());
+self.reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(foo, ());
 
-() => self.reduce(foo, ());
+reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(foo, ());
 
-reduce(foo, ());
+self.send(Foo);
 
-let asd =
-  self.reduce(() => {
-    doSomething;
-    Foo
-  });
+send(Foo);
 
-let asd = self.reduce((_) => Foo);
+self.send(Bar);
+
+send(Bar);
+
+let asd = () => {
+  doSomething;
+  self.send(Foo);
+};
+
+let asd = (_) => self.send(Foo);
 
 let asd = () => self.send(FooThisShouldntChange);
 
-let asd =
-  self.reduce((a) => {
-    open Foo;
-    doSomeEventFirst(a);
-    let b = a;
-    doSomeEvent(a);
-    doSomeEvent2(a);
+let asd = a => {
+  open Foo;
+  doSomeEventFirst(a);
+  let b = a;
+  doSomeEvent(a);
+  doSomeEvent2(a);
+  self.send(
     if (a) {
       more();
       Foo(a);
@@ -32,22 +37,25 @@ let asd =
       more();
       Foo(a);
     }
-  });
+  );
+};
 
-let asd = self.ReasonReact.reduce((a) => Foo(a));
+let asd = a => self.ReasonReact.send(Foo(a));
 
 let asd = reduce(bar);
 
-let asd = reduce((_) => Foo);
+let asd = (_) => send(Foo);
 
-foo(reduce((_) => DesktopNotifsDenied));
+foo((_) => send(DesktopNotifsDenied));
 
-let handleNotificationsChange = (_event, {ReasonReact.state, reduce}) =>
+let handleNotificationsChange = (_event, {ReasonReact.state, send}) =>
   /* foo(bar, reduce((_) => DesktopNotifsDenied)); */
-  foo(bar, reduce((_) => DesktopNotifsDenied));
+  foo(bar, (_) => send(DesktopNotifsDenied));
+
 
 /***
  * Copyright 2004-present Facebook. All Rights Reserved.
  */
-[@bs.module] external centeredContainer : ReasonReact.reactClass = "CenteredContainer.react";
-
+[@bs.module]
+external centeredContainer : ReasonReact.reactClass =
+  "CenteredContainer.react";
