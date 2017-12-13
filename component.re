@@ -45,3 +45,9 @@ foo(reduce((_) => DesktopNotifsDenied));
 let handleNotificationsChange = (_event, {ReasonReact.state, reduce}) =>
   /* foo(bar, reduce((_) => DesktopNotifsDenied)); */
   foo(bar, reduce((_) => DesktopNotifsDenied));
+
+/***
+ * Copyright 2004-present Facebook. All Rights Reserved.
+ */
+[@bs.module] external centeredContainer : ReasonReact.reactClass = "CenteredContainer.react";
+
