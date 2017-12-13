@@ -228,6 +228,24 @@ let apply = (~source, ~target, mapper) => {
   };
 };
 
+let fileCopy = (input, output) => {
+  open Unix;
+  let buffer_size = 8192;
+  let buffer = Bytes.create(buffer_size);
+  let fd_in = openfile(input, [O_RDONLY], 0);
+  let fd_out = openfile(output, [O_WRONLY, O_CREAT, O_TRUNC], 438);
+  let rec copy_loop = () =>
+    switch (read(fd_in, buffer, 0, buffer_size)) {
+    | 0 => ()
+    | r =>
+      ignore(write(fd_out, buffer, 0, r));
+      copy_loop();
+    };
+  copy_loop();
+  close(fd_in);
+  close(fd_out);
+};
+
 switch Sys.argv {
 | [||]
 | [|_|] => print_endline("Pass a list of files you'd like to convert")
@@ -235,18 +253,19 @@ switch Sys.argv {
   let files = Array.sub(arguments, 1, Array.length(arguments) - 1);
   files
   |> Array.iter((file) => {
-       let isReason =
-         Filename.check_suffix(file, ".re");
-         /* || Filename.check_suffix(file, ".rei"); */
+       let isReason = Filename.check_suffix(file, ".re");
+       /* || Filename.check_suffix(file, ".rei"); */
        /* let isOCaml =
-         Filename.check_suffix(file, ".ml")
-         || Filename.check_suffix(file, ".mli"); */
+          Filename.check_suffix(file, ".ml")
+          || Filename.check_suffix(file, ".mli"); */
        if (isReason) {
-         let inChannel = Unix.open_process_in("refmt --print binary " ++ file);
-         let out =
-           Unix.open_process_out(
-             "refmt --parse binary --print re > result.re"
+         fileCopy(file, file ++ ".backup");
+         let inChannel =
+           Unix.open_process_in(
+             "refmt --parse re --print binary " ++ file ++ ".backup"
            );
+         let out =
+           Unix.open_process_out("refmt --parse binary --print re > " ++ file);
          apply(~source=inChannel, ~target=out, refactorMapper);
          close_out(out);
        }
