@@ -4,8 +4,8 @@
 # ./migrate.exe component.re result.re
 
 ocamlc -c -pp "refmt --print binary" -I +compiler-libs -g -impl migrate.re
-ocamlc -I +compiler-libs ocamlcommon.cma migrate.cmo -o migrate.exe
-./migrate.exe component.re result.re
+ocamlc -I +compiler-libs ocamlcommon.cma unix.cma migrate.cmo -o migrate.exe
+./migrate.exe component.re
 
 # this one compiles everything in a single shot
 # ocamlc -pp "refmt --print binary" -g -no-alias-deps -w -40 \

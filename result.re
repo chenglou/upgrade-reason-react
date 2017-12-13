@@ -1,4 +1,4 @@
-let asd = self.reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(fooa);
+let asd12 = self.reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(fooa);
 
 let asd = () => self.send(Foo);
 

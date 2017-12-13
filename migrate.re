@@ -25,7 +25,7 @@ let rec wrapFunctionReturn = (body, wrap) =>
   | anythingElse => wrap(body)
   };
 
-let jsxMapper = {
+let refactorMapper = {
   ...default_mapper,
   expr: (mapper, expression) =>
     /* self.reduce(foo) */
@@ -198,7 +198,8 @@ let jsxMapper = {
 };
 
 let apply = (~source, ~target, mapper) => {
-  let ic = open_in_bin(source);
+  /* let ic = open_in_bin(source); */
+  let ic = source;
   let magic =
     really_input_string(ic, String.length(Config.ast_impl_magic_number));
   let rewrite = (transform) => {
@@ -206,11 +207,12 @@ let apply = (~source, ~target, mapper) => {
     let ast = input_value(ic);
     close_in(ic);
     let ast = transform(ast);
-    let oc = open_out_bin(target);
+    /* let oc = open_out_bin(target); */
+    let oc = target;
     output_string(oc, magic);
     output_value(oc, Location.input_name^);
     output_value(oc, ast);
-    close_out(oc);
+    /* close_out(oc); */
   }
   and fail = () => {
     close_in(ic);
@@ -226,28 +228,27 @@ let apply = (~source, ~target, mapper) => {
   };
 };
 
-/* Arg.parse([], parseFile, "Usage: migrate.exe MyFileToMigrate.re"); */
-/*let () = Ast_mapper.run_main((_argv) => jsxMapper());*/
-/* if (Sys.file_exists("temp") || Sys.file_exists("temp_processed")) {
-     print_endline(
-       "temp and/or temp_processed files are presesnt in the current directory. Move or remove them to continue."
-     );
-   } else { */
-Array.sub(Sys.argv, 1, Array.length(Sys.argv) - 1)
-|> Array.iter((file) =>
-     if (Sys.command("refmt --print binary component.re > temp") == 0) {
-       apply(~source="temp", ~target="temp_processed", jsxMapper);
-       if (Sys.command(
-             "refmt --parse=binary -p re temp_processed > result.re"
-           )
-           != 0) {
-         print_endline("Could not print output file");
-       } else {
-         ();
-       };
-     } else {
-       print_endline("Could not parse the input file named: " ++ file);
-     }
-   );
-/* |> (() => ignore(Sys.command("rm temp; rm temp_processed"))); */
-/* }; */
+switch Sys.argv {
+| [||]
+| [|_|] => print_endline("Pass a list of files you'd like to convert")
+| arguments =>
+  let files = Array.sub(arguments, 1, Array.length(arguments) - 1);
+  files
+  |> Array.iter((file) => {
+       let isReason =
+         Filename.check_suffix(file, ".re");
+         /* || Filename.check_suffix(file, ".rei"); */
+       /* let isOCaml =
+         Filename.check_suffix(file, ".ml")
+         || Filename.check_suffix(file, ".mli"); */
+       if (isReason) {
+         let inChannel = Unix.open_process_in("refmt --print binary " ++ file);
+         let out =
+           Unix.open_process_out(
+             "refmt --parse binary --print re > result.re"
+           );
+         apply(~source=inChannel, ~target=out, refactorMapper);
+         close_out(out);
+       }
+     });
+};
