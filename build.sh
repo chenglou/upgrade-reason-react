@@ -1,4 +1,4 @@
-# ocamlc -c -g -no-alias-deps -w -40 -I +compiler-libs ocamlcommon.cma refmt_api.ml
+ocamlc -c -g -no-alias-deps -w -40 -I +compiler-libs ocamlcommon.cma refmt_api.ml
 ocamlc -c -pp "refmt --print binary" -I +compiler-libs -g -impl migrate.re
 ocamlc -I +compiler-libs ocamlcommon.cma unix.cma refmt_api.cmo migrate.cmo -o migrate.exe
 ./migrate.exe component.re

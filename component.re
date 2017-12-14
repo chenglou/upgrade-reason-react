@@ -1,35 +1,36 @@
-let asd12 = self.reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(fooa);
+let asd12 = self.reduce(fooa);
 
-let asd = () => self.send(Foo);
+let asd = self.reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(() => Foo);
 
-self.reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(foo, ());
+self.reduce(foo, ());
 
-reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(foo, ());
+reduce(foo, ());
 
-self.send(Foo);
+self.reduce(_e => Foo, ());
 
-send(Foo);
+reduce(_e => Foo, ());
 
-self.send(Bar);
+self.reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(() => Bar, ());
 
-send(Bar);
+reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(() => Bar, ());
 
-let asd = () => {
-  doSomething;
-  self.send(Foo);
-};
+let asd =
+  self.reduce(() => {
+    doSomething;
+    Foo
+  });
 
-let asd = (_) => self.send(Foo);
+let asd = self.reduce((_) => Foo);
 
 let asd = () => self.send(FooThisShouldntChange);
 
-let asd = a => {
-  open Foo;
-  doSomeEventFirst(a);
-  let b = a;
-  doSomeEvent(a);
-  doSomeEvent2(a);
-  self.send(
+let asd =
+  self.reduce((a) => {
+    open Foo;
+    doSomeEventFirst(a);
+    let b = a;
+    doSomeEvent(a);
+    doSomeEvent2(a);
     if (a) {
       more();
       Foo(a);
@@ -37,25 +38,22 @@ let asd = a => {
       more();
       Foo(a);
     }
-  );
-};
+  });
 
-let asd = a => self.ReasonReact.send(Foo(a));
+let asd = self.ReasonReact.reduce((a) => Foo(a));
 
 let asd = reduce(bar);
 
-let asd = (_) => send(Foo);
+let asd = reduce((_) => Foo);
 
-foo((_) => send(DesktopNotifsDenied));
+foo(reduce((_) => DesktopNotifsDenied));
 
-let handleNotificationsChange = (_event, {ReasonReact.state, send}) =>
+let handleNotificationsChange = (_event, {ReasonReact.state, reduce}) =>
   /* foo(bar, reduce((_) => DesktopNotifsDenied)); */
-  foo(bar, (_) => send(DesktopNotifsDenied));
-
+  foo(bar, reduce((_) => DesktopNotifsDenied));
 
 /***
  * Copyright 2004-present Facebook. All Rights Reserved.
  */
-[@bs.module]
-external centeredContainer : ReasonReact.reactClass =
-  "CenteredContainer.react";
+[@bs.module] external centeredContainer : ReasonReact.reactClass = "CenteredContainer.react";
+
