@@ -240,31 +240,40 @@ let refactorMapper = {
 
 switch Sys.argv {
 | [||]
-| [|_|] => print_endline("Pass a list of files you'd like to convert")
+| [|_|]
+| [|_, "help" | "-help" | "--help" |] => print_endline("Usage: pass a list of .re files you'd like to convert.")
 | arguments =>
   let files = Array.sub(arguments, 1, Array.length(arguments) - 1);
   files
-  |> Array.iter((file) => {
+  |> Array.iter(file => {
        let isReason = Filename.check_suffix(file, ".re");
        /* || Filename.check_suffix(file, ".rei"); */
        /* let isOCaml =
           Filename.check_suffix(file, ".ml")
           || Filename.check_suffix(file, ".mli"); */
        if (isReason) {
-         let ic = open_in_bin(file);
-         let lexbuf = Lexing.from_channel(ic);
-         let (ast, comments) =
-           Refmt_api.Reason_toolchain.RE.implementation_with_comments(lexbuf);
-         let newAst = refactorMapper.structure(refactorMapper, ast);
-         let target = file;
-         let oc = open_out_bin(target);
-         let formatter = Format.formatter_of_out_channel(oc);
-         Refmt_api.Reason_toolchain.RE.print_implementation_with_comments(
-           formatter,
-           (newAst, comments)
-         );
-         Format.print_flush();
-         close_out(oc);
-       }
+         if (Sys.file_exists(file)) {
+           let ic = open_in_bin(file);
+           let lexbuf = Lexing.from_channel(ic);
+           let (ast, comments) =
+             Refmt_api.Reason_toolchain.RE.implementation_with_comments(
+               lexbuf
+             );
+           let newAst = refactorMapper.structure(refactorMapper, ast);
+           let target = file;
+           let oc = open_out_bin(target);
+           let formatter = Format.formatter_of_out_channel(oc);
+           Refmt_api.Reason_toolchain.RE.print_implementation_with_comments(
+             formatter,
+             (newAst, comments)
+           );
+           Format.print_flush();
+           close_out(oc);
+         } else {
+           print_endline(file ++ " doesn't exist. Skipped.");
+         };
+       };
      });
+  print_endline("\n===\n");
+  print_endline("Done! Please build your project again. It's possible that it fails; if so, it's expected. Check the changes this script made. You might need to re-run this script.");
 };

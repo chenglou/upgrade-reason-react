@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "bsb"
+    "start": "bsb -w",
+    "postinstall": "bsb"
   },
   "files": [
     "src/refmt_api.ml",
