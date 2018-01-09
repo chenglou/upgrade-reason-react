@@ -8,6 +8,10 @@ reduce(foo, ());
 
 self.reduce(_e => Foo, ());
 
+self.reduce(() => Foo, ());
+
+self.reduce(() => Foo(1), ());
+
 reduce(_e => Foo, ());
 
 self.reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(() => Bar, ());
