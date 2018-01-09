@@ -1,0 +1,13 @@
+{
+  "name": "refactor",
+  "sources": "src",
+  "entries": [{
+    "backend": "bytecode",
+    "main-module": "Migrate"
+  }],
+  "warnings": {
+    "number": "-40-20-26-27-32-45-44-33-37-34-39-6"
+  },
+  "ocaml-dependencies": ["unix", "compiler-libs"],
+  "refmt": 3
+}

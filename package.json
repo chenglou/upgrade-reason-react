@@ -1,0 +1,29 @@
+{
+  "name": "test-refactor",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "bsb"
+  },
+  "files": [
+    "src/refmt_api.ml",
+    "src/migrate.re",
+    "bsconfig.json",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chenglou/test-refactor.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/chenglou/test-refactor/issues"
+  },
+  "homepage": "https://github.com/chenglou/test-refactor#readme",
+  "dependencies": {
+    "bs-platform": "github:bsansouci/bsb-native#2.1.1"
+  }
+}
