@@ -1,10 +1,11 @@
 {
-  "name": "test-refactor",
+  "name": "upgrade-reason-react-to-031",
   "version": "0.0.1",
   "description": "",
   "main": "index.js",
   "scripts": {
     "start": "bsb -w",
+    "clean": "bsb -clean",
     "postinstall": "bsb"
   },
   "files": [
@@ -15,15 +16,15 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/chenglou/test-refactor.git"
+    "url": "git+https://github.com/chenglou/upgrade-reason-react-to-031.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/chenglou/test-refactor/issues"
+    "url": "https://github.com/chenglou/upgrade-reason-react-to-031/issues"
   },
-  "homepage": "https://github.com/chenglou/test-refactor#readme",
+  "homepage": "https://github.com/chenglou/upgrade-reason-react-to-031#readme",
   "dependencies": {
     "bs-platform": "github:bsansouci/bsb-native#2.1.1"
   }
