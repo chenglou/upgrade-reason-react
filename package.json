@@ -26,6 +26,6 @@
   },
   "homepage": "https://github.com/chenglou/upgrade-reason-react-to-031#readme",
   "dependencies": {
-    "bs-platform": "github:bsansouci/bsb-native#2.1.1"
+    "bs-platform": "github:bsansouci/bsb-native#f2c8ed0f517782fc8740d9a38bff28cabff70124"
   }
 }
