@@ -13,32 +13,91 @@ open Parsetree;
 
 open Longident;
 
-let rec wrapFunctionReturn = (body, wrap) =>
+let isUnit = a =>
+  switch (a) {
+  | {
+      pexp_desc: Pexp_construct({txt: Lident("()")}, None),
+      pexp_loc,
+      pexp_attributes,
+    } =>
+    true
+  | _ => false
+  };
+
+let unitExpr = Exp.construct({loc: Location.none, txt: Lident("()")}, None);
+
+let rec changeInnerMostExpr = (body, rewrite) =>
   switch (body.pexp_desc) {
-  | Pexp_let(a, b, nextExpression) => {
-      ...body,
-      pexp_desc: Pexp_let(a, b, wrapFunctionReturn(nextExpression, wrap)),
+  | Pexp_let(recFlag, binding, letBody) =>
+    switch (changeInnerMostExpr(letBody, rewrite)) {
+    | expr when isUnit(expr) => unitExpr
+    | expr => {...body, pexp_desc: Pexp_let(recFlag, binding, expr)}
     }
-  | Pexp_sequence(first, second) => {
-      ...body,
-      pexp_desc: Pexp_sequence(first, wrapFunctionReturn(second, wrap)),
+  | Pexp_sequence(first, second) =>
+    switch (changeInnerMostExpr(second, rewrite)) {
+    | expr when isUnit(expr) => first
+    | expr => {...body, pexp_desc: Pexp_sequence(first, expr)}
     }
-  | Pexp_open(a, b, nextExpression) => {
-      ...body,
-      pexp_desc: Pexp_open(a, b, wrapFunctionReturn(nextExpression, wrap)),
+  | Pexp_open(overrideFlag, ident, inner) =>
+    switch (changeInnerMostExpr(inner, rewrite)) {
+    | expr when isUnit(expr) => unitExpr
+    | expr => {...body, pexp_desc: Pexp_open(overrideFlag, ident, expr)}
     }
-  | anythingElse => wrap(body)
+  | Pexp_ifthenelse(cond, branch1, None) =>
+    switch (changeInnerMostExpr(branch1, rewrite)) {
+    | expr when isUnit(expr) => cond
+    | expr => {...body, pexp_desc: Pexp_ifthenelse(cond, expr, None)}
+    }
+  | Pexp_ifthenelse(cond, branch1, Some(branch2)) =>
+    let b1 =
+      switch (changeInnerMostExpr(branch1, rewrite)) {
+      | expr when isUnit(expr) => unitExpr
+      | expr => expr
+      };
+    let b2 =
+      switch (changeInnerMostExpr(branch2, rewrite)) {
+      | expr when isUnit(expr) => None
+      | expr => Some(expr)
+      };
+    Exp.ifthenelse(cond, b1, b2);
+  | Pexp_match(exp, cases) => {
+      ...body,
+      pexp_desc:
+        Pexp_match(
+          exp,
+          cases
+          |> List.map(case =>
+               switch (changeInnerMostExpr(case.pc_rhs, rewrite)) {
+               | expr when isUnit(expr) => {
+                   ...case,
+                   pc_rhs:
+                     Exp.ident({loc: Location.none, txt: Lident("()")}),
+                 }
+               | expr => {...case, pc_rhs: expr}
+               }
+             ),
+        ),
+    }
+  | anythingElse => rewrite(body)
+  };
+
+let removeNoUpdate = expr =>
+  switch (expr) {
+  | {
+      pexp_desc:
+        Pexp_construct(
+          {
+            txt:
+              Lident("NoUpdate") | Ldot(Lident("ReasonReact"), "NoUpdate"),
+          },
+          _,
+        ),
+    } => unitExpr
+  | expr => expr
   };
 
 let refactorMapper = {
   ...default_mapper,
-  pat: (mapper, pattern) =>
-    switch (pattern) {
-    | {ppat_desc, ppat_loc, ppat_attributes} as a => {
-        ...a,
-        ppat_desc: Ppat_any,
-      }
-    },
   expr: (mapper, expression) =>
     /* self.reduce(foo) */
     /* self.reduce(() => Foo) */
@@ -48,218 +107,43 @@ let refactorMapper = {
     switch (expression) {
     | {
         pexp_desc:
-          Pexp_apply(
-            {
-              pexp_desc:
-                Pexp_field(
-                  {pexp_desc: Pexp_ident({txt: Lident("self")})},
-                  {
-                    txt:
-                      (
-                        Lident("reduce") |
-                        Ldot(Lident("ReasonReact"), "reduce") |
-                        Lident(
-                          "reduce__pleaseInlineTheArgumentAndRunTheScriptAgain",
-                        ) |
-                        Ldot(
-                          Lident("ReasonReact"),
-                          "reduce__pleaseInlineTheArgumentAndRunTheScriptAgain",
-                        )
-                      ) as reduceCall,
-                  },
-                ),
-            },
-            ([_] | [_, _]) as arguments,
-          ),
-      } =>
-      switch (arguments) {
-      | [(Nolabel, {pexp_desc: Pexp_fun(Nolabel, None, argument, body)})] =>
-        /* self.reduce(a => Foo(a)) --> a => self.send(Foo(a)) */
-        let selfSendCall =
-          switch (reduceCall) {
-          | Lident(_) => Ldot(Lident("self"), "send")
-          | Ldot(_) => Ldot(Ldot(Lident("self"), "ReasonReact"), "send")
-          | anythingElse => anythingElse
-          };
-        let wrappedBody =
-          wrapFunctionReturn(body, return =>
-            Exp.apply(
-              Exp.ident({txt: selfSendCall, loc: Location.none}),
-              [(Nolabel, return)],
-            )
-          );
-        Exp.fun_(Nolabel, None, argument, wrappedBody);
-      | [
-          (Nolabel, firstArgument),
-          (Nolabel, {pexp_desc: Pexp_construct({txt: Lident("()")}, None)}) as second,
-        ] =>
-        /* self.reduce(_bla => Foo(a), ()) --> self.send(Foo(a)) */
-        /* self.reduce(foo, ()) --> self.reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(foo, ()) */
-        switch (firstArgument) {
-        | {pexp_desc: Pexp_fun(Nolabel, None, argument, body)} =>
-          let selfSendCall =
-            switch (reduceCall) {
-            | Lident(_) => Ldot(Lident("self"), "send")
-            | Ldot(_) => Ldot(Ldot(Lident("self"), "ReasonReact"), "send")
-            | anythingElse => anythingElse
-            };
-          Exp.apply(
-            Exp.ident({txt: selfSendCall, loc: Location.none}),
-            [(Nolabel, body)],
-          );
-        | anythingElse =>
-          let selfSendCall =
-            switch (reduceCall) {
-            | Lident(_) =>
-              Ldot(
-                Lident("self"),
-                "reduce__pleaseInlineTheArgumentAndRunTheScriptAgain",
-              )
-            | Ldot(_) =>
-              Ldot(
-                Ldot(Lident("self"), "ReasonReact"),
-                "reduce__pleaseInlineTheArgumentAndRunTheScriptAgain",
-              )
-            | anythingElse => anythingElse
-            };
-          Exp.apply(
-            Exp.ident({txt: selfSendCall, loc: Location.none}),
-            [(Nolabel, anythingElse), second],
-          );
-        }
-      | notInlinedCallback =>
-        /* self.reduce(foo) --> self.reduce__pleaseInlineThisAndRunTheScriptAgain(foo) */
-        let selfReduceCall =
-          switch (reduceCall) {
-          | Lident(_) =>
-            Ldot(
-              Lident("self"),
-              "reduce__pleaseInlineTheArgumentAndRunTheScriptAgain",
-            )
-          | Ldot(_) =>
-            Ldot(
-              Ldot(Lident("self"), "ReasonReact"),
-              "reduce__pleaseInlineTheArgumentAndRunTheScriptAgain",
-            )
-          | anythingElse => anythingElse
-          };
-        Exp.apply(
-          Exp.ident({txt: selfReduceCall, loc: Location.none}),
-          arguments,
-        );
-      }
-    | {
-        pexp_desc:
-          Pexp_apply(
-            {pexp_desc: Pexp_ident({txt: Lident("reduce")})},
-            [
-              (
-                Nolabel,
-                {pexp_desc: Pexp_fun(Nolabel, None, argument, body)},
-              ),
-            ],
-          ),
-      } =>
-      /* reduce(foo => Bar)) --> foo => send(Bar) */
-      let wrappedBody =
-        wrapFunctionReturn(body, return =>
-          Exp.apply(
-            Exp.ident({txt: Lident("send"), loc: Location.none}),
-            [(Nolabel, return)],
-          )
-        );
-      Exp.fun_(Nolabel, None, argument, wrappedBody);
-    | {
-        pexp_desc:
-          Pexp_apply(
-            {
-              pexp_desc:
-                Pexp_ident({
-                  txt:
-                    Lident(
-                      "reduce" |
-                      "reduce__pleaseInlineTheArgumentAndRunTheScriptAgain",
-                    ),
-                }),
-            },
-            [
-              (Nolabel, firstArgument),
-              (
-                Nolabel,
-                {pexp_desc: Pexp_construct({txt: Lident("()")}, None)},
-              ) as second,
-            ],
-          ),
-      } =>
-      /* reduce(_bla => Foo(a), ()) --> send(Foo(a)) */
-      /* reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(_bla => Foo(a), ()) --> send(Foo(a)) */
-      /* reduce(foo, ()) --> reduce__pleaseInlineTheArgumentAndRunTheScriptAgain(foo, ()) */
-      switch (firstArgument) {
-      | {pexp_desc: Pexp_fun(Nolabel, None, argument, body)} =>
-        Exp.apply(
-          Exp.ident({txt: Lident("send"), loc: Location.none}),
-          [(Nolabel, body)],
-        )
-      | anythingElse =>
-        Exp.apply(
-          Exp.ident({
-            txt:
-              Lident("reduce__pleaseInlineTheArgumentAndRunTheScriptAgain"),
-            loc: Location.none,
-          }),
-          [(Nolabel, anythingElse), second],
-        )
-      }
-    | {
-        pexp_desc:
-          Pexp_fun(
-            Nolabel,
-            None,
-            {ppat_desc: Ppat_record(fields, flag)} as pattern,
-            body,
-          ),
+          Pexp_record(fields, Some({pexp_desc: Pexp_ident(_)}) as spread),
+        pexp_loc,
+        pexp_attributes,
       }
         when
           List.exists(
-            (({txt}, _)) =>
-              switch (txt) {
-              | Ldot(
-                  Lident("ReasonReact"),
-                  "state" | "reduce" | "handle" | "retainedProps" | "send",
-                ) =>
-                true
+            ((field, _value)) =>
+              switch (field) {
+              | {txt: Lident("didMount")} => true
               | _ => false
               },
             fields,
           ) =>
-      /* ({ReasonReact.state, reduce}) --> ({ReasonReact.state, send}) */
       let newFields =
-        List.map(
-          (({txt} as fieldName, pattern)) =>
-            switch (txt) {
-            | Ldot(Lident("ReasonReact"), "reduce") => (
-                {...fieldName, txt: Ldot(Lident("ReasonReact"), "send")},
-                {
-                  ...pattern,
-                  ppat_desc: Ppat_var({txt: "send", loc: Location.none}),
-                },
-              )
-            | Lident("reduce") => (
-                {...fieldName, txt: Lident("send")},
-                {
-                  ...pattern,
-                  ppat_desc: Ppat_var({txt: "send", loc: Location.none}),
-                },
-              )
-            | _ => (fieldName, pattern)
-            },
-          fields,
-        );
-      let newPattern = {...pattern, ppat_desc: Ppat_record(newFields, flag)};
-      Exp.fun_(Nolabel, None, newPattern, mapper.expr(mapper, body));
-    | {pexp_desc: Pexp_fun(Nolabel, None, pattern, body)} =>
-      /* drill deeper into a function, check the subsequent args */
-      Exp.fun_(Nolabel, None, pattern, mapper.expr(mapper, body))
+        fields
+        |> List.map(((field, value)) =>
+             switch (field, value) {
+             | (
+                 {txt: Lident("didMount")},
+                 {pexp_desc: Pexp_fun(Nolabel, None, arg, body)} as value,
+               ) => (
+                 field,
+                 {
+                   ...value,
+                   pexp_desc:
+                     Pexp_fun(
+                       Nolabel,
+                       None,
+                       arg,
+                       changeInnerMostExpr(body, removeNoUpdate),
+                     ),
+                 },
+               )
+             | fv => fv
+             }
+           );
+      {pexp_loc, pexp_attributes, pexp_desc: Pexp_record(newFields, spread)};
     | anythingElse => default_mapper.expr(mapper, anythingElse)
     },
 };
