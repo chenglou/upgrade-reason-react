@@ -160,7 +160,7 @@ let refactorMapper = {
                      ),
                  },
                )
-             | fv => fv
+             | fv => (field, default_mapper.expr(mapper, value))
              }
            );
       {pexp_loc, pexp_attributes, pexp_desc: Pexp_record(newFields, spread)};

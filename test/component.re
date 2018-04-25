@@ -4,6 +4,8 @@ let asd2 = ReasonReact.arrayToElement;
 
 let asd3 = foo ? <div /> : ReasonReact.nullElement;
 
+let asd4 = ReasonReact.arrayToElement([|ReasonReact.nullElement|]);
+
 let make = () => {
   ...component,
   render: 1,
