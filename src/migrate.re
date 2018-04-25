@@ -179,7 +179,7 @@ let refactorMapper = {
           loc: Location.none,
           txt: Ldot(Lident("ReasonReact"), "array"),
         })
-      | "nullToElement" =>
+      | "nullElement" =>
         Exp.ident({
           loc: Location.none,
           txt: Ldot(Lident("ReasonReact"), "null"),
