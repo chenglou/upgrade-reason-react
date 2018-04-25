@@ -1,3 +1,7 @@
+let asd = <div>(ReasonReact.stringToElement("foo"))</div>;
+
+let asd3 = ReasonReact.arrayToElement;
+
 let make = () => {
   ...component,
   render: 1,
@@ -5,6 +9,15 @@ let make = () => {
     foo();
     bar();
     NoUpdate;
+  }
+};
+
+let make = () => {
+  ...component,
+  render: 1,
+  didMount: a => {
+    bar();
+    Update(a);
   }
 };
 
@@ -82,3 +95,5 @@ let make = () => {
 };
 
 let make = () => {...component, render: 1, didMount: foo};
+
+let asd2 = ReasonReact2.stringToElement("foo");

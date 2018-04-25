@@ -68,11 +68,7 @@ let rec changeInnerMostExpr = (body, rewrite) =>
           cases
           |> List.map(case =>
                switch (changeInnerMostExpr(case.pc_rhs, rewrite)) {
-               | expr when isUnit(expr) => {
-                   ...case,
-                   pc_rhs:
-                     Exp.ident({loc: Location.none, txt: Lident("()")}),
-                 }
+               | expr when isUnit(expr) => {...case, pc_rhs: unitExpr}
                | expr => {...case, pc_rhs: expr}
                }
              ),
@@ -93,18 +89,42 @@ let removeNoUpdate = expr =>
           _,
         ),
     } => unitExpr
+  | {
+      pexp_desc:
+        Pexp_construct(
+          {
+            txt:
+              Lident("Update") | Lident("UpdateWithSideEffects") |
+              Ldot(Lident("ReasonReact"), "Update") |
+              Ldot(Lident("ReasonReact"), "UpdateWithSideEffects"),
+          },
+          _,
+        ),
+    } =>
+    Exp.apply(
+      Exp.ident({loc: Location.none, txt: Ldot(Lident("self"), "send")}),
+      [
+        (
+          Nolabel,
+          Exp.apply(
+            Exp.ident({
+              loc: Location.none,
+              txt: Lident("pleaseTurnMeIntoAnActionConstructorForTheReducer"),
+            }),
+            [(Nolabel, expr)],
+          ),
+        ),
+      ],
+    )
   | expr => expr
   };
 
 let refactorMapper = {
   ...default_mapper,
   expr: (mapper, expression) =>
-    /* self.reduce(foo) */
-    /* self.reduce(() => Foo) */
-    /* self.reduce((a) => Foo(a)) */
-    /* self.ReasonReact.reduce(...) */
-    /* reduce(...) */
     switch (expression) {
+    /* remove NoUpdate from didMount return */
+    /* change Update & UpdateWithSideEffect to something else */
     | {
         pexp_desc:
           Pexp_record(fields, Some({pexp_desc: Pexp_ident(_)}) as spread),
@@ -144,6 +164,28 @@ let refactorMapper = {
              }
            );
       {pexp_loc, pexp_attributes, pexp_desc: Pexp_record(newFields, spread)};
+    /* stringToElement -> string */
+    /* arrayToElement -> array */
+    /* nullToElement -> null */
+    | {pexp_desc: Pexp_ident({txt: Ldot(Lident("ReasonReact"), ident)})} as expr =>
+      switch (ident) {
+      | "stringToElement" =>
+        Exp.ident({
+          loc: Location.none,
+          txt: Ldot(Lident("ReasonReact"), "string"),
+        })
+      | "arrayToElement" =>
+        Exp.ident({
+          loc: Location.none,
+          txt: Ldot(Lident("ReasonReact"), "array"),
+        })
+      | "nullToElement" =>
+        Exp.ident({
+          loc: Location.none,
+          txt: Ldot(Lident("ReasonReact"), "null"),
+        })
+      | _ => default_mapper.expr(mapper, expr)
+      }
     | anythingElse => default_mapper.expr(mapper, anythingElse)
     },
 };
