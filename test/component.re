@@ -1,6 +1,8 @@
 let asd = <div>(ReasonReact.stringToElement("foo"))</div>;
 
-let asd3 = ReasonReact.arrayToElement;
+let asd2 = ReasonReact.arrayToElement;
+
+let asd3 = foo ? <div /> : ReasonReact.nullElement;
 
 let make = () => {
   ...component,
