@@ -11,7 +11,7 @@ Pick the **right version** of the migration script based on the version of Reaso
 - Upgrading from reason-react 0.3.0 to 0.3.1: `npm install https://github.com/chenglou/upgrade-reason-react#0.3.0-to-0.3.1`
 - Upgrading from reason-react 0.3.1 to 0.4.0: `npm install https://github.com/chenglou/upgrade-reason-react#0.3.1-to-0.4.0`
 
-and so on. See the [releases page](https://github.com/chenglou/upgrade-reason-react-to-031/releases) for all the scripts.
+and so on. See the [releases page](https://github.com/chenglou/upgrade-reason-react/releases) for all the scripts.
 
 **Notes**:
 
@@ -21,7 +21,7 @@ and so on. See the [releases page](https://github.com/chenglou/upgrade-reason-re
 ### Usage
 
 ```sh
-./node_modules/upgrade-reason-react-to-031/lib/bs/bytecode/migrate.byte MyComponent1.re
+./node_modules/upgrade-reason-react/lib/bs/bytecode/migrate.byte MyComponent1.re
 ```
 
 Where `MyComponent1.re` is the file you want to upgrade. You can also pass a glob, e.g. `src/*.re`, to upgrade multiple files at once.
