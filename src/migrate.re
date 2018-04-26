@@ -229,6 +229,6 @@ switch (Sys.argv) {
      });
   print_endline("\n===\n");
   print_endline(
-    "Done! Please build your project again. It's possible that it fails; if so, it's expected. Check the changes this script made. You might need to re-run this script."
+    "Done! Please build your project again. It's possible that it fails; if so, it's expected. Check the changes this script made."
   );
 };
