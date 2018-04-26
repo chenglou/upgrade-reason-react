@@ -71,8 +71,8 @@ let rec changeInnerMostExpr = (body, rewrite) =>
                | expr when isUnit(expr) => {...case, pc_rhs: unitExpr}
                | expr => {...case, pc_rhs: expr}
                }
-             ),
-        ),
+             )
+        )
     }
   | anythingElse => rewrite(body)
   };
@@ -86,8 +86,8 @@ let removeNoUpdate = expr =>
             txt:
               Lident("NoUpdate") | Ldot(Lident("ReasonReact"), "NoUpdate"),
           },
-          _,
-        ),
+          _
+        )
     } => unitExpr
   | {
       pexp_desc:
@@ -98,8 +98,8 @@ let removeNoUpdate = expr =>
               Ldot(Lident("ReasonReact"), "Update") |
               Ldot(Lident("ReasonReact"), "UpdateWithSideEffects"),
           },
-          _,
-        ),
+          _
+        )
     } =>
     Exp.apply(
       Exp.ident({loc: Location.none, txt: Ldot(Lident("self"), "send")}),
@@ -111,10 +111,10 @@ let removeNoUpdate = expr =>
               loc: Location.none,
               txt: Lident("pleaseTurnMeIntoAnActionConstructorForTheReducer"),
             }),
-            [(Nolabel, expr)],
-          ),
-        ),
-      ],
+            [(Nolabel, expr)]
+          )
+        )
+      ]
     )
   | expr => expr
   };
@@ -138,7 +138,7 @@ let refactorMapper = {
               | {txt: Lident("didMount")} => true
               | _ => false
               },
-            fields,
+            fields
           ) =>
       let newFields =
         fields
@@ -146,7 +146,7 @@ let refactorMapper = {
              switch (field, value) {
              | (
                  {txt: Lident("didMount")},
-                 {pexp_desc: Pexp_fun(Nolabel, None, arg, body)} as value,
+                 {pexp_desc: Pexp_fun(Nolabel, None, arg, body)} as _value
                ) => (
                  field,
                  {
@@ -156,9 +156,9 @@ let refactorMapper = {
                        Nolabel,
                        None,
                        arg,
-                       changeInnerMostExpr(body, removeNoUpdate),
-                     ),
-                 },
+                       changeInnerMostExpr(body, removeNoUpdate)
+                     )
+                 }
                )
              | fv => (field, default_mapper.expr(mapper, value))
              }
@@ -187,7 +187,7 @@ let refactorMapper = {
       | _ => default_mapper.expr(mapper, expr)
       }
     | anythingElse => default_mapper.expr(mapper, anythingElse)
-    },
+    }
 };
 
 switch (Sys.argv) {
@@ -210,7 +210,7 @@ switch (Sys.argv) {
            let lexbuf = Lexing.from_channel(ic);
            let (ast, comments) =
              Refmt_api.Reason_toolchain.RE.implementation_with_comments(
-               lexbuf,
+               lexbuf
              );
            let newAst = refactorMapper.structure(refactorMapper, ast);
            let target = file;
@@ -218,7 +218,7 @@ switch (Sys.argv) {
            let formatter = Format.formatter_of_out_channel(oc);
            Refmt_api.Reason_toolchain.RE.print_implementation_with_comments(
              formatter,
-             (newAst, comments),
+             (newAst, comments)
            );
            Format.print_flush();
            close_out(oc);
@@ -229,6 +229,6 @@ switch (Sys.argv) {
      });
   print_endline("\n===\n");
   print_endline(
-    "Done! Please build your project again. It's possible that it fails; if so, it's expected. Check the changes this script made. You might need to re-run this script.",
+    "Done! Please build your project again. It's possible that it fails; if so, it's expected. Check the changes this script made. You might need to re-run this script."
   );
 };
