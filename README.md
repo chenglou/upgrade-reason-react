@@ -4,6 +4,8 @@ ReasonReact breaking change releases, if any, are accompanied by this upgrade sc
 
 ### Installation
 
+**Don't forget** to upgrade your reason-react dependency first!
+
 Pick the **right version** of the migration script based on the version of ReasonReact your app is using:
 
 - Upgrading from reason-react 0.3.0 to 0.3.1: `npm install https://github.com/chenglou/upgrade-reason-react#0.3.0-to-0.3.1`
