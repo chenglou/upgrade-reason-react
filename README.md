@@ -27,3 +27,11 @@ and so on. See the [releases page](https://github.com/chenglou/upgrade-reason-re
 Where `MyComponent1.re` is the file you want to upgrade. You can also pass a glob, e.g. `src/*.re`, to upgrade multiple files at once.
 
 `npm uninstall upgrade-reason-react` after you're done.
+
+### Development
+
+If you're interested in contributing to this library, clone this repo and do `yarn && yarn start` to start the watcher.
+
+For seeing a Reason file's AST, do `ocamlc -pp "refmt --print binary" -dparsetree -impl test/component.re` (assuming you have `ocamlc` and `refmt` somewhere).
+
+Make the desired changes in `src/migrate.re`, then run `./lib/bs/bytecode/migrate.byte test/component.re` to test the modification of `component.re` by your `migrate` script.
