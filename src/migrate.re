@@ -70,6 +70,33 @@ let rec changeInnerMostExpr = (body, rewrite) =>
   | anythingElse => rewrite(body)
   };
 
+let hasWeirdHyphens = ({txt}) => {
+  switch (txt) {
+  | Lident(name) when String.length(name) > 5
+    && name.[0] === 'd'
+    && name.[1] === 'a'
+    && name.[2] === 't'
+    && name.[3] === 'a'
+    && name.[4] === '-'
+    => true /* aria-foo is fine. Transformed later to ariaFoo */
+  | _ => false
+  }
+};
+
+let processLabelIfAria = (label) => {
+  let len = String.length(label);
+  if (len > 5
+    && label.[0] === 'a'
+    && label.[1] === 'r'
+    && label.[2] === 'i'
+    && label.[3] === 'a'
+    && label.[4] === '-') {
+    "aria" ++ String.capitalize(String.sub(label, 5, len - 5))
+  } else {
+    label
+  }
+};
+
 let refactorMapper = {
   ...default_mapper,
   module_expr: (mapper, item) => {
@@ -173,18 +200,38 @@ let refactorMapper = {
     | {pexp_desc: Pexp_apply(
         {pexp_desc: Pexp_ident({loc, txt: Ldot(Lident("ReasonReact"), "createDomElement")})},
         [
-          (Nolabel, domTag),
+          (Nolabel, {pexp_desc: Pexp_constant(Pconst_string(domTag, None))}),
           (Nolabel, props),
           (Nolabel, children),
         ]
       )} =>
+      let newProps = switch (props) {
+      /* {"a": b} => ~a=b */
+      | {pexp_desc: Pexp_extension((
+          {txt: "bs.obj"},
+          PStr([{pstr_desc: Pstr_eval({pexp_desc: Pexp_record(fields, None)}, attrs)}])
+        ))}
+        when fields |> List.for_all(((name, value)) => !hasWeirdHyphens(name)) =>
+        fields |> List.map((({txt}, value)) => {
+          let label = Longident.last(txt) |> processLabelIfAria;
+          (Labelled(label), value)
+        });
+      /* Js.Obj.empty() => nothing */
+      | {pexp_desc: Pexp_apply(
+          {pexp_desc: Pexp_ident({txt: Ldot(Ldot(Lident("Js"), "Obj"), "empty")})},
+          [(Nolabel, {pexp_desc: Pexp_construct({txt: Lident("()")}, None)})]
+        )} => []
+      | e =>
+        /* TODO: bail, help user here by wrapping with ReactDOMRe.objToDOMProps */
+        [(Nolabel, mapper.expr(mapper, e))]
+      };
+      let newProps = newProps @ [(Labelled("children"), children), (Nolabel, unitExpr)];
       {
         ...item,
         pexp_attributes: [({loc: Location.none, txt: "JSX"}, PStr([])), ...item.pexp_attributes],
         pexp_desc: Pexp_apply(
-          domTag,
-          /* TODO: not done */
-          []
+          Exp.ident({loc: Location.none, txt: Lident(domTag)}),
+          newProps
         )
       }
     | anythingElse => default_mapper.expr(mapper, anythingElse)
