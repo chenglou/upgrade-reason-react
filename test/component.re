@@ -1,103 +1,29 @@
-let asd = <div>(ReasonReact.stringToElement("foo"))</div>;
+/* ReactEventRe => ReactEvent */
+open ReactEventRe;
+module Foo = ReactEventRe.UI;
+ReactEventRe.Keyboard.stopPropagation(e);
 
-let asd2 = ReasonReact.arrayToElement;
+/* _type => type_ */
+let asd = ReactEventRe.Form._type;
+let asd = ReactEventRe.(ReactEventRe.Form._type);
 
-let asd3 = foo ? <div /> : ReasonReact.nullElement;
+/* normalize pipe usage for events (avoid bs.send.pipe, deprecated) */
+e |> ReactEventRe.Mouse.preventDefault;
+e -> ReactEventRe.Mouse.preventDefault;
 
-let asd4 = ReasonReact.arrayToElement([|ReasonReact.nullElement|]);
+/* remove ReactDOMRe.domElementToObj in these cases + normalize pipe usage like above */
+event |> ReactEventRe.Form.target |> ReactDOMRe.domElementToObj;
+(event |> ReactEventRe.Form.target |> ReactDOMRe.domElementToObj)##value;
+(ReactEventRe.Form.target(event) |> ReactDOMRe.domElementToObj)##value;
+ReactDOMRe.domElementToObj(ReactEventRe.Form.target(event))##value;
 
-let make = () => {
-  ...component,
-  render: 1,
-  didMount: a => {
-    foo();
-    bar();
-    NoUpdate;
-  }
-};
+/* don't accidentally transform things like this */
+event |> ReactEventRe.target |> ReactDOMRe.domElementToObj;
 
-let make = () => {
-  ...component,
-  render: 1,
-  didMount: a => {
-    bar();
-    Update(a);
-  }
-};
 
-module Foo = {
-  let make = () => {
-    ...componenta,
-    didMount: a => {
-      foo();
-      bar();
-      ReasonReact.NoUpdate;
-    }
-  };
-  let make = () => {
-    ...component,
-    didMount: a =>
-      if (a) {
-        foo;
-        ReasonReact.NoUpdate;
-      } else {
-        bar;
-        ReasonReact.Update(a);
-      }
-  };
-  let make = () => {
-    ...component,
-    didMount: a => {
-      asd;
-      switch (a) {
-      | A => ReasonReact.NoUpdate
-      | B =>
-        foo;
-        NoUpdate;
-      };
-    }
-  };
-};
+/* ReasonReact.createDomElement("div", {"a": b}, bar) => <div a=(ReactDOMRe.props(~a="b", ())> ...bar </div> */
+ReasonReact.createDomElement("div", {"a": b}, children);
+ReasonReact.createDomElement("div", {"data-foo": b}, children);
+ReasonReact.createDomElement("span", props, bar);
 
-/* don't change */
-let make = () => {
-  render: 1,
-  didMount: a => {
-    foo();
-    bar();
-    ReasonReact.NoUpdate;
-  }
-};
-
-let make = () => {
-  ...component,
-  render: 1,
-  didMounta: a => {
-    foo();
-    bar();
-    ReasonReact.NoUpdate;
-  }
-};
-
-let make = () => {
-  ...component,
-  render: 1,
-  didMounta: a => {
-    foo();
-    ReasonReact.NoUpdate;
-    ReasonReact.Update(s);
-  }
-};
-
-let make = () => {
-  ...component,
-  render: 1,
-  didMounta: a => {
-    foo();
-    ok(ReasonReact.NoUpdate);
-  }
-};
-
-let make = () => {...component, render: 1, didMount: foo};
-
-let asd2 = ReasonReact2.stringToElement("foo");
+[@JSX] a;

@@ -1,16 +1,9 @@
 open Refmt_api.Migrate_parsetree;
-
 open Ast_404;
-
-/* module To_current = Convert(OCaml_404, OCaml_402); */
 open Ast_helper;
-
 open Ast_mapper;
-
 open Asttypes;
-
 open Parsetree;
-
 open Longident;
 
 let isUnit = a =>
@@ -77,114 +70,122 @@ let rec changeInnerMostExpr = (body, rewrite) =>
   | anythingElse => rewrite(body)
   };
 
-let removeNoUpdate = expr =>
-  switch (expr) {
-  | {
-      pexp_desc:
-        Pexp_construct(
-          {
-            txt:
-              Lident("NoUpdate") | Ldot(Lident("ReasonReact"), "NoUpdate"),
-          },
-          _
-        )
-    } => unitExpr
-  | {
-      pexp_desc:
-        Pexp_construct(
-          {
-            txt:
-              Lident("Update") | Lident("UpdateWithSideEffects") |
-              Ldot(Lident("ReasonReact"), "Update") |
-              Ldot(Lident("ReasonReact"), "UpdateWithSideEffects"),
-          },
-          _
-        )
-    } =>
-    Exp.apply(
-      Exp.ident({loc: Location.none, txt: Ldot(Lident("self"), "send")}),
-      [
-        (
-          Nolabel,
-          Exp.apply(
-            Exp.ident({
-              loc: Location.none,
-              txt: Lident("pleaseTurnMeIntoAnActionConstructorForTheReducer"),
-            }),
-            [(Nolabel, expr)]
-          )
-        )
-      ]
-    )
-  | expr => expr
-  };
-
 let refactorMapper = {
   ...default_mapper,
-  expr: (mapper, expression) =>
-    switch (expression) {
-    /* remove NoUpdate from didMount return */
-    /* change Update & UpdateWithSideEffect to something else */
-    | {
-        pexp_desc:
-          Pexp_record(fields, Some({pexp_desc: Pexp_ident(_)}) as spread),
-        pexp_loc,
-        pexp_attributes,
-      }
-        when
-          List.exists(
-            ((field, _value)) =>
-              switch (field) {
-              | {txt: Lident("didMount")} => true
-              | _ => false
-              },
-            fields
-          ) =>
-      let newFields =
-        fields
-        |> List.map(((field, value)) =>
-             switch (field, value) {
-             | (
-                 {txt: Lident("didMount")},
-                 {pexp_desc: Pexp_fun(Nolabel, None, arg, body)} as _value
-               ) => (
-                 field,
-                 {
-                   ...value,
-                   pexp_desc:
-                     Pexp_fun(
-                       Nolabel,
-                       None,
-                       arg,
-                       changeInnerMostExpr(body, removeNoUpdate)
-                     )
-                 }
-               )
-             | fv => (field, default_mapper.expr(mapper, value))
-             }
-           );
-      {pexp_loc, pexp_attributes, pexp_desc: Pexp_record(newFields, spread)};
-    /* stringToElement -> string */
-    /* arrayToElement -> array */
-    /* nullToElement -> null */
-    | {pexp_desc: Pexp_ident({txt: Ldot(Lident("ReasonReact"), ident)})} as expr =>
-      switch (ident) {
-      | "stringToElement" =>
-        Exp.ident({
-          loc: Location.none,
-          txt: Ldot(Lident("ReasonReact"), "string"),
-        })
-      | "arrayToElement" =>
-        Exp.ident({
-          loc: Location.none,
-          txt: Ldot(Lident("ReasonReact"), "array"),
-        })
-      | "nullElement" =>
-        Exp.ident({
-          loc: Location.none,
-          txt: Ldot(Lident("ReasonReact"), "null"),
-        })
-      | _ => default_mapper.expr(mapper, expr)
+  module_expr: (mapper, item) => {
+    switch (item) {
+    /* ReactEventRe.UI => ReactEvent.UI */
+    | {pmod_desc: Pmod_ident({loc, txt: Ldot(Lident("ReactEventRe"), eventModuleName)})} =>
+      {...item, pmod_desc: Pmod_ident({loc, txt: Ldot(Lident("ReactEvent"), eventModuleName)})}
+    | _ => default_mapper.module_expr(mapper, item)
+    }
+  },
+  structure_item: (mapper, item) => {
+    switch (item) {
+    /* open ReactEventRe => open ReactEvent */
+    | {pstr_desc: Pstr_open({popen_lid: {loc, txt: Lident("ReactEventRe")}} as o)} =>
+      {...item, pstr_desc: Pstr_open({...o, popen_lid: {loc, txt: Lident("ReactEvent")}})}
+    | _ => default_mapper.structure_item(mapper, item)
+    }
+  },
+  expr: (mapper, item) =>
+    switch (item) {
+    /* ReactEventRe.(...) => ReactEvent.(...) */
+    | {pexp_desc: Pexp_open(overrideFlag, {loc, txt: Lident("ReactEventRe")}, e)} =>
+      {...item, pexp_desc: Pexp_open(overrideFlag, {loc, txt: Lident("ReactEvent")}, mapper.expr(mapper, e))}
+    /* ReactEventRe.*._type => ReactEvent.*.type_ */
+    | {pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEventRe"), eventModuleName), "_type")})} =>
+      {...item, pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEvent"), eventModuleName), "type_")})}
+    /* e |> ReactEventRe.Mouse.preventDefault => e->ReactEvent.Mouse.preventDefault */
+    | {pexp_desc: Pexp_apply(
+        {pexp_desc: Pexp_ident({loc, txt: Lident("|>")})} as f,
+        [
+          (Nolabel, e),
+          (Nolabel, {pexp_desc: Pexp_ident({
+            loc: loc2,
+            txt: Ldot(
+              Ldot(Lident("ReactEventRe"), _eventModuleName),
+              _callName
+            )
+          })} as call)
+        ]
+      )} =>
+      {...item, pexp_desc: Pexp_apply(
+        {...f, pexp_desc: Pexp_ident({loc, txt: Lident("|.")})},
+        [(Nolabel, mapper.expr(mapper, e)), (Nolabel, mapper.expr(mapper, call))]
+      )}
+    /* e |> ReactEventRe.Form.target |> ReactDOMRe.domElementToObj => e->ReactEvent.Form.target */
+    /* |--- or anything similar ---| */
+    | {pexp_desc: Pexp_apply(
+        {pexp_desc: Pexp_ident({loc, txt: Lident("|>" | "|.")})} as f,
+        [
+          (Nolabel, e),
+          (Nolabel, {pexp_desc: Pexp_ident({
+            txt: Ldot(Lident("ReactDOMRe"), "domElementToObj"),
+          })})
+        ]
+      )}
+    /* ReactDOMRe.domElementToObj(e |> ReactEventRe.Form.target) => e->ReactEvent.Form.target */
+    /*                            |--- or anything similar ---| */
+    | {pexp_desc: Pexp_apply(
+        {pexp_desc: Pexp_ident({loc, txt: Ldot(Lident("ReactDOMRe"), "domElementToObj")})} as f,
+        [(Nolabel, e)]
+      )} =>
+        switch (e) {
+        | {pexp_desc: Pexp_apply(
+            {pexp_desc: Pexp_ident({loc, txt: Lident("|>" | "|.")})} as f,
+            [
+              (Nolabel, e2),
+              (Nolabel, {pexp_desc: Pexp_ident({
+                loc: loc2,
+                txt: Ldot(Ldot(Lident("ReactEventRe"), eventModuleName), callName),
+              })} as call)
+            ]
+          )} =>
+          {...e, pexp_desc: Pexp_apply(
+            {...f, pexp_desc: Pexp_ident({loc, txt: Lident("|.")})},
+            [
+              (Nolabel, mapper.expr(mapper, e2)),
+              (Nolabel, {...call, pexp_desc: Pexp_ident({
+                loc: loc2,
+                txt: Ldot(Ldot(Lident("ReactEvent"), eventModuleName), callName),
+              })})
+            ]
+          )}
+        | {pexp_desc: Pexp_apply(
+            {pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEventRe"), eventModuleName), callName)})} as f,
+            [(Nolabel, e2)]
+          )} =>
+          {...e, pexp_desc: Pexp_apply(
+            {...f, pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEvent"), eventModuleName), callName)})},
+            [(Nolabel, mapper.expr(mapper, e2))]
+          )}
+        | _ => default_mapper.expr(mapper, item)
+        };
+    /* ReactEventRe => ReactEvent */
+    /* this should be at the end of ReactEventRe codemods, since pattern matching order matters */
+    | {pexp_desc: Pexp_ident({loc, txt: Lident("ReactEventRe")})} =>
+      {...item, pexp_desc: Pexp_ident({loc, txt: Lident("ReactEvent")})}
+    | {pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEventRe"), eventModuleName), call)})} =>
+      {...item, pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEvent"), eventModuleName), call)})}
+
+    /* ReasonReact.createDomElement("div", {"a": b}, bar) => <div a=(ReactDOMRe.props(~a="b", ())> ...bar </div> */
+    | {pexp_desc: Pexp_apply(
+        {pexp_desc: Pexp_ident({loc, txt: Ldot(Lident("ReasonReact"), "createDomElement")})},
+        [
+          (Nolabel, domTag),
+          (Nolabel, props),
+          (Nolabel, children),
+        ]
+      )} =>
+      {
+        ...item,
+        pexp_attributes: [({loc: Location.none, txt: "JSX"}, PStr([])), ...item.pexp_attributes],
+        pexp_desc: Pexp_apply(
+          domTag,
+          /* TODO: not done */
+          []
+        )
       }
     | anythingElse => default_mapper.expr(mapper, anythingElse)
     }
