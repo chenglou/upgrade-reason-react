@@ -83,7 +83,7 @@ let hasWeirdHyphens = ({txt}) => {
   }
 };
 
-let processLabelIfAria = (label) => {
+let camelCaseAriaIfExists = (label) => {
   let len = String.length(label);
   if (len > 5
     && label.[0] === 'a'
@@ -196,44 +196,71 @@ let refactorMapper = {
     | {pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEventRe"), eventModuleName), call)})} =>
       {...item, pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEvent"), eventModuleName), call)})}
 
-    /* ReasonReact.createDomElement("div", {"a": b}, bar) => <div a=(ReactDOMRe.props(~a="b", ())> ...bar </div> */
+    /* ReasonReact.createDomElement("div", {"a": b}, bar) => <div ~a="b"> ...bar </div> */
     | {pexp_desc: Pexp_apply(
         {pexp_desc: Pexp_ident({loc, txt: Ldot(Lident("ReasonReact"), "createDomElement")})},
         [
-          (Nolabel, {pexp_desc: Pexp_constant(Pconst_string(domTag, None))}),
+          (Nolabel, {pexp_desc: Pexp_constant(Pconst_string(domTag, None))}) as tag,
           (Nolabel, props),
           (Nolabel, children),
         ]
       )} =>
-      let newProps = switch (props) {
-      /* {"a": b} => ~a=b */
+      let newChildren = mapper.expr(mapper, children);
+      switch (props) {
+      /* if props are like {"a": b} */
       | {pexp_desc: Pexp_extension((
           {txt: "bs.obj"},
           PStr([{pstr_desc: Pstr_eval({pexp_desc: Pexp_record(fields, None)}, attrs)}])
         ))}
         when fields |> List.for_all(((name, value)) => !hasWeirdHyphens(name)) =>
-        fields |> List.map((({txt}, value)) => {
-          let label = Longident.last(txt) |> processLabelIfAria;
-          (Labelled(label), value)
+        /* has some data-foo attributes? Bail and in catch-all branch below */
+        /* otherwise, become <div ~a="b"> ...bar </div> */
+        let newProps = fields |> List.map((({txt}, value)) => {
+          let label = Longident.last(txt) |> camelCaseAriaIfExists;
+          (Labelled(label), mapper.expr(mapper, value))
         });
-      /* Js.Obj.empty() => nothing */
+        {
+          ...item,
+          pexp_attributes: [({loc: Location.none, txt: "JSX"}, PStr([])), ...item.pexp_attributes],
+          pexp_desc: Pexp_apply(
+            Exp.ident({loc: Location.none, txt: Lident(domTag)}),
+            newProps @ [(Labelled("children"), newChildren), (Nolabel, unitExpr)]
+          )
+        }
+      /* if props is Js.Obj.empty() */
       | {pexp_desc: Pexp_apply(
           {pexp_desc: Pexp_ident({txt: Ldot(Ldot(Lident("Js"), "Obj"), "empty")})},
           [(Nolabel, {pexp_desc: Pexp_construct({txt: Lident("()")}, None)})]
-        )} => []
+        )} =>
+        {
+          ...item,
+          pexp_attributes: [({loc: Location.none, txt: "JSX"}, PStr([])), ...item.pexp_attributes],
+          pexp_desc: Pexp_apply(
+            Exp.ident({loc: Location.none, txt: Lident(domTag)}),
+            [
+              (Labelled("children"), newChildren),
+              (Nolabel, unitExpr)
+            ]
+          )
+        }
+      /* if props is anything else */
       | e =>
-        /* TODO: bail, help user here by wrapping with ReactDOMRe.objToDOMProps */
-        [(Nolabel, mapper.expr(mapper, e))]
+        /* keep things as ReactDOMRe.createElementVariadic("div", ~props=ReactDOMRe.objToDOMProps({"a": b}), bar) */
+        {
+          ...item,
+          pexp_desc: Pexp_apply(
+            Exp.ident({loc, txt: Ldot(Lident("ReactDOMRe"), "createElementVariadic")}),
+            [
+              tag,
+              (Labelled("props"), Exp.apply(
+                Exp.ident({loc: Location.none, txt: Ldot(Lident("ReactDOMRe"), "objToDOMProps")}),
+                [(Nolabel, mapper.expr(mapper, props))]
+              )),
+              (Nolabel, newChildren),
+            ]
+          )
+        }
       };
-      let newProps = newProps @ [(Labelled("children"), children), (Nolabel, unitExpr)];
-      {
-        ...item,
-        pexp_attributes: [({loc: Location.none, txt: "JSX"}, PStr([])), ...item.pexp_attributes],
-        pexp_desc: Pexp_apply(
-          Exp.ident({loc: Location.none, txt: Lident(domTag)}),
-          newProps
-        )
-      }
     | anythingElse => default_mapper.expr(mapper, anythingElse)
     }
 };

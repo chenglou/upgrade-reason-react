@@ -24,5 +24,8 @@ event |> ReactEventRe.target |> ReactDOMRe.domElementToObj;
 /* ReasonReact.createDomElement("div", {"a": b}, bar) => ([@JSX] div(~a=b, ~children=bar, ())) aka <div a=b> ...bar </div> */
 ReasonReact.createDomElement("div", {"a": b, "aria-label": d}, children);
 ReasonReact.createDomElement("div", Js.Obj.empty(), children);
-ReasonReact.createDomElement("div", {"data-foo": b}, children);
+ReasonReact.createDomElement("div", {"data-foo": ReactEventRe.Keyboard.target}, children);
 ReasonReact.createDomElement("span", props, bar);
+ReasonReact.createDomElement("div", {"a": b, "aria-label": d}, (
+  ReasonReact.createDomElement("div", {"a": b, "onClick": (e) => ReactEventRe.Mouse.preventDefault(e)}, children)
+));
