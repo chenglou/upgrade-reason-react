@@ -1,3 +1,5 @@
+open Belt;
+
 open Refmt_api.Migrate_parsetree;
 open Ast_404;
 open Ast_helper;
@@ -6,69 +8,7 @@ open Asttypes;
 open Parsetree;
 open Longident;
 
-let isUnit = a =>
-  switch (a) {
-  | {
-      pexp_desc: Pexp_construct({txt: Lident("()")}, None),
-      pexp_loc,
-      pexp_attributes,
-    } =>
-    true
-  | _ => false
-  };
-
 let unitExpr = Exp.construct({loc: Location.none, txt: Lident("()")}, None);
-
-let rec changeInnerMostExpr = (body, rewrite) =>
-  switch (body.pexp_desc) {
-  | Pexp_let(recFlag, binding, letBody) =>
-    switch (changeInnerMostExpr(letBody, rewrite)) {
-    | expr when isUnit(expr) => unitExpr
-    | expr => {...body, pexp_desc: Pexp_let(recFlag, binding, expr)}
-    }
-  | Pexp_sequence(first, second) =>
-    switch (changeInnerMostExpr(second, rewrite)) {
-    | expr when isUnit(expr) => first
-    | expr => {...body, pexp_desc: Pexp_sequence(first, expr)}
-    }
-  | Pexp_open(overrideFlag, ident, inner) =>
-    switch (changeInnerMostExpr(inner, rewrite)) {
-    | expr when isUnit(expr) => unitExpr
-    | expr => {...body, pexp_desc: Pexp_open(overrideFlag, ident, expr)}
-    }
-  | Pexp_ifthenelse(cond, branch1, None) =>
-    switch (changeInnerMostExpr(branch1, rewrite)) {
-    | expr when isUnit(expr) => cond
-    | expr => {...body, pexp_desc: Pexp_ifthenelse(cond, expr, None)}
-    }
-  | Pexp_ifthenelse(cond, branch1, Some(branch2)) =>
-    let b1 =
-      switch (changeInnerMostExpr(branch1, rewrite)) {
-      | expr when isUnit(expr) => unitExpr
-      | expr => expr
-      };
-    let b2 =
-      switch (changeInnerMostExpr(branch2, rewrite)) {
-      | expr when isUnit(expr) => None
-      | expr => Some(expr)
-      };
-    Exp.ifthenelse(cond, b1, b2);
-  | Pexp_match(exp, cases) => {
-      ...body,
-      pexp_desc:
-        Pexp_match(
-          exp,
-          cases
-          |> List.map(case =>
-               switch (changeInnerMostExpr(case.pc_rhs, rewrite)) {
-               | expr when isUnit(expr) => {...case, pc_rhs: unitExpr}
-               | expr => {...case, pc_rhs: expr}
-               }
-             )
-        )
-    }
-  | anythingElse => rewrite(body)
-  };
 
 let hasWeirdHyphens = ({txt}) => {
   switch (txt) {
@@ -201,8 +141,8 @@ let refactorMapper = {
         pexp_desc: Pexp_apply({pexp_desc: Pexp_ident({loc, txt: Lident(domTag)})}, [_, ..._] as props),
         pexp_attributes: [_, ..._] as pexp_attributes
       }
-      when pexp_attributes |> List.exists((({txt}, _)) => txt == "JSX") =>
-      let newProps = props |> List.map(((label, expr)) => {
+      when List.some(pexp_attributes, (({txt}, _)) => txt == "JSX") =>
+      let newProps = List.map(props, ((label, expr)) => {
         let newLabel = switch (label) {
         | Labelled("_open") => Labelled("open_")
         | Labelled("_type") => Labelled("type_")
@@ -232,10 +172,10 @@ let refactorMapper = {
           {txt: "bs.obj"},
           PStr([{pstr_desc: Pstr_eval({pexp_desc: Pexp_record(fields, None)}, attrs)}])
         ))}
-        when fields |> List.for_all(((name, value)) => !hasWeirdHyphens(name)) =>
+        when List.every(fields, ((name, value)) => !hasWeirdHyphens(name)) =>
         /* has some data-foo attributes? Bail and in catch-all branch below */
         /* otherwise, become <div ~a="b"> ...bar </div> */
-        let newProps = fields |> List.map((({txt}, value)) => {
+        let newProps = List.map(fields, (({txt}, value)) => {
           let label = Longident.last(txt) |> camelCaseAriaIfExists;
           (Labelled(label), mapper.expr(mapper, value))
         });
@@ -291,39 +231,44 @@ switch (Sys.argv) {
 | [|_, "help" | "-help" | "--help"|] =>
   print_endline("Usage: pass a list of .re files you'd like to convert.")
 | arguments =>
-  let files = Array.sub(arguments, 1, Array.length(arguments) - 1);
-  files
-  |> Array.iter(file => {
-       let isReason = Filename.check_suffix(file, ".re");
-       /* || Filename.check_suffix(file, ".rei"); */
-       /* let isOCaml =
-          Filename.check_suffix(file, ".ml")
-          || Filename.check_suffix(file, ".mli"); */
-       if (isReason) {
-         if (Sys.file_exists(file)) {
-           let ic = open_in_bin(file);
-           let lexbuf = Lexing.from_channel(ic);
-           let (ast, comments) =
-             Refmt_api.Reason_toolchain.RE.implementation_with_comments(
-               lexbuf
-             );
-           let newAst = refactorMapper.structure(refactorMapper, ast);
-           let target = file;
-           let oc = open_out_bin(target);
-           let formatter = Format.formatter_of_out_channel(oc);
-           Refmt_api.Reason_toolchain.RE.print_implementation_with_comments(
-             formatter,
-             (newAst, comments)
-           );
-           Format.print_flush();
-           close_out(oc);
-         } else {
-           print_endline(file ++ " doesn't exist. Skipped.");
-         };
-       };
-     });
-  print_endline("\n===\n");
-  print_endline(
-    "Done! Please build your project again. It's possible that it fails; if so, it's expected. Check the changes this script made."
-  );
+  let validFiles =
+    Array.slice(arguments, ~offset=1, ~len=Array.length(arguments) - 1)
+    |. Array.keep(file => {
+      let isReason = Filename.check_suffix(file, ".re");
+      if (isReason) {
+        if (Sys.file_exists(file)) {
+          true
+        } else {
+          print_endline(file ++ " doesn't exist. Skipped.");
+          false
+        }
+      } else {
+        false
+      }
+    });
+  switch (validFiles) {
+  | [||] => print_endline("You didn't pass any Reason file to convert.");
+  | files =>
+    Array.forEach(files, file => {
+      let ic = open_in_bin(file);
+      let lexbuf = Lexing.from_channel(ic);
+      let (ast, comments) =
+      Refmt_api.Reason_toolchain.RE.implementation_with_comments(
+        lexbuf
+        );
+      let newAst = refactorMapper.structure(refactorMapper, ast);
+      let target = file;
+      let oc = open_out_bin(target);
+      let formatter = Format.formatter_of_out_channel(oc);
+      Refmt_api.Reason_toolchain.RE.print_implementation_with_comments(
+        formatter,
+        (newAst, comments)
+        );
+      Format.print_flush();
+      close_out(oc);
+    });
+    print_endline(
+      "\nDone! Please build your project again. It's possible that it fails; if so, it's expected. Check the changes this script made."
+    );
+  }
 };
