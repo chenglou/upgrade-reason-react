@@ -196,6 +196,26 @@ let refactorMapper = {
     | {pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEventRe"), eventModuleName), call)})} =>
       {...item, pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEvent"), eventModuleName), call)})}
 
+    /* ([@JSX] div(~_to="a", ~children=foo, ())) => <div to_="a"> ...foo </div> */
+    | {
+        pexp_desc: Pexp_apply({pexp_desc: Pexp_ident({loc, txt: Lident(domTag)})}, [_, ..._] as props),
+        pexp_attributes: [_, ..._] as pexp_attributes
+      }
+      when pexp_attributes |> List.exists((({txt}, _)) => txt == "JSX") =>
+      let newProps = props |> List.map(((label, expr)) => {
+        let newLabel = switch (label) {
+        | Labelled("_open") => Labelled("open_")
+        | Labelled("_type") => Labelled("type_")
+        | Labelled("_begin") => Labelled("begin_")
+        | Labelled("_end") => Labelled("end_")
+        | Labelled("_in") => Labelled("in_")
+        | Labelled("_to") => Labelled("to_")
+        | label => label
+        };
+        (newLabel, mapper.expr(mapper, expr))
+      });
+      {...item, pexp_desc: Pexp_apply(Exp.ident({loc, txt: Lident(domTag)}), newProps)}
+
     /* ReasonReact.createDomElement("div", {"a": b}, bar) => <div ~a="b"> ...bar </div> */
     | {pexp_desc: Pexp_apply(
         {pexp_desc: Pexp_ident({loc, txt: Ldot(Lident("ReasonReact"), "createDomElement")})},

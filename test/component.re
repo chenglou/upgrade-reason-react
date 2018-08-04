@@ -29,3 +29,10 @@ ReasonReact.createDomElement("span", props, bar);
 ReasonReact.createDomElement("div", {"a": b, "aria-label": d}, (
   ReasonReact.createDomElement("div", {"a": b, "onClick": (e) => ReactEventRe.Mouse.preventDefault(e)}, children)
 ));
+
+/* <div _to="a">foo</div> => <div to_="a">foo</div> */
+<div _to="a" _open="b">foo</div>
+/* don't change random calls */
+div(~_to="a", ~_open="b", ~children=[foo], ());
+/* don't change uppercase JSX calls */
+<Foo _to="a">1</Foo>
