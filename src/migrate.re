@@ -233,7 +233,34 @@ let refactorMapper = {
     | {pexp_desc: Pexp_ident({loc, txt: Ldot(Lident("ReasonReact"), ("string" | "array" | "null") as name)})} =>
       {...item, pexp_desc: Pexp_ident({loc, txt: Ldot(Lident("React"), name)})}
     | anythingElse => default_mapper.expr(mapper, anythingElse)
-    }
+    },
+  value_description: (mapper, valueDescription) => {
+    let isComponent = ref(false);
+    let rec transformType = (coreType) => switch (coreType) {
+    | {ptyp_desc: Ptyp_arrow((Labelled(_) | Optional(_)) as label, paramType, innerType)} =>
+      {...coreType, ptyp_desc: Ptyp_arrow(label, paramType, transformType(innerType))}
+    | {ptyp_desc: Ptyp_arrow(Nolabel, paramType, innerType)} =>
+      {...coreType, ptyp_desc: Ptyp_arrow(Labelled("children"), paramType, transformType(innerType))}
+    | {ptyp_desc: Ptyp_constr({txt: Ldot(Lident("ReasonReact"), "component") | Lident("component")} as loc, typeArguments)} =>
+      isComponent := true;
+      {...coreType, ptyp_desc: Ptyp_constr({...loc, txt: Ldot(Lident("React"), "element")}, [])}
+    | otherType => otherType
+    };
+    let newType = transformType(valueDescription.pval_type);
+    let transformed = if (isComponent^) {
+      {
+        ...valueDescription,
+        pval_attributes: [
+          ({txt: "react.component", loc: valueDescription.pval_loc}, PStr([])),
+          ...valueDescription.pval_attributes
+        ],
+        pval_type: newType,
+      }
+    } else {
+      valueDescription
+    };
+    default_mapper.value_description(mapper, transformed);
+  }
 };
 
 switch (Sys.argv) {
@@ -245,7 +272,7 @@ switch (Sys.argv) {
   let validFiles =
     Array.slice(arguments, ~offset=1, ~len=Array.length(arguments) - 1)
     |. Array.keep(file => {
-      let isReason = Filename.check_suffix(file, ".re");
+      let isReason = Filename.check_suffix(file, ".re") || Filename.check_suffix(file, ".rei");
       if (isReason) {
         if (Sys.file_exists(file)) {
           true

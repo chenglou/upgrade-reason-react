@@ -44,7 +44,7 @@ module Nested = {
 };
 
 module Nested = {
-  let make3 =
+  let make4 =
     (
       ~prop1,
       ~prop2=?,
@@ -61,3 +61,14 @@ module Nested = {
 ReasonReact.string("foo");
 ReasonReact.array([|foo|]);
 ReasonReact.null;
+
+module type Nested = {
+  let make5:
+    (
+      ~prop1: string,
+      ~prop2: int=?,
+      ~prop3: string=?,
+      float,
+    ) =>
+    ReasonReact.component(int, string, int);
+};
