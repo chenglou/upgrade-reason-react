@@ -11,8 +11,9 @@ Pick the **right version** of the migration script based on the version of Reaso
 - Upgrading from reason-react 0.3.0 to 0.3.1: `npm install https://github.com/chenglou/upgrade-reason-react\#0.3.0-to-0.3.1`
 - Upgrading from reason-react 0.3.1 to 0.4.0: `npm install https://github.com/chenglou/upgrade-reason-react\#0.3.1-to-0.4.0`
 - Upgrading from reason-react 0.4.2 to 0.5.0: `npm install https://github.com/chenglou/upgrade-reason-react\#0.4.2-to-0.5.0`
+- Upgrading from reason-react 0.4.2 to 0.5.0: `npm install https://github.com/rickyvetter/upgrade-reason-react\#0.6.0-to-0.7.0`
 
-and so on. See the [releases page](https://github.com/chenglou/upgrade-reason-react/releases) for all the scripts.
+and so on. See the [releases page](https://github.com/rickyvetter/upgrade-reason-react/releases) for all the scripts.
 
 **Notes**:
 
