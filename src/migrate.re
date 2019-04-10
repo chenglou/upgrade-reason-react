@@ -146,6 +146,33 @@ let refactorMapper = {
     prospectiveComponentMakePairs := [pairs, ...prospectiveComponentMakePairs^];
     let mapped = default_mapper.structure(mapper, item);
     let newStructureItems = List.reduce(List.reverse(pairs^), [], (acc, (component, make, args)) => {
+      let realArgs = args;
+      let args = List.concat(
+        args,
+        [Labelled("children")],
+      );
+      let propType = Typ.constr(
+        lidentLoc(Ldot(Lident("Js"), "t")),
+        [
+          Typ.object_(
+            List.map(args, arg =>
+              switch (arg) {
+              | Labelled(name) => (name, [], Typ.var(safeTypeFromValue(name)))
+              | Optional(name) => (
+                  name,
+                  [],
+                  Typ.constr(
+                    lidentLoc(Lident("option")),
+                    [Typ.var(safeTypeFromValue(name))],
+                  ),
+                )
+              | Nolabel => raise(Invalid_argument("This should never happen"))
+              }
+            ),
+            Closed,
+          ),
+        ],
+      );
       List.concat(acc, [
       Str.value(Nonrecursive, [
         Vb.mk(
@@ -166,10 +193,10 @@ let refactorMapper = {
                 )
                 | component => Exp.ident(lidentLoc(Lident(component)))
               }),
-              (Nolabel, Exp.fun_(Nolabel, None, Pat.var(lidentLoc("reactProps")), Exp.apply(
+              (Nolabel, Exp.fun_(Nolabel, None, Pat.constraint_(Pat.var(lidentLoc("reactProps")), propType), Exp.apply(
                 Exp.ident(lidentLoc(Lident(make))),
                 List.concat(
-                  List.map(args, (arg) => switch arg {
+                  List.map(realArgs, (arg) => switch arg {
                   | Labelled(name) | Optional(name) => (arg, Exp.apply(
                     Exp.ident(lidentLoc(Lident("##"))),
                     [
@@ -199,14 +226,7 @@ let refactorMapper = {
           lidentLoc(make ++ "Props"),
           recursivelyMakeNamedArgsForExternal(
             args,
-            Typ.arrow(Nolabel, Typ.constr(lidentLoc(Lident("unit")), []), Typ.constr(
-              lidentLoc(Ldot(Lident("Js"), "t")),
-              [Typ.object_(List.map(args, (arg) => switch (arg) {
-              | Labelled(name) => (name, [], Typ.var(safeTypeFromValue(name)))
-              | Optional(name) => (name, [], Typ.constr(lidentLoc(Lident("option")), [Typ.var(safeTypeFromValue(name))]))
-              | Nolabel => raise(Invalid_argument("This should never happen"))
-              }), Closed)]
-            ))
+            Typ.arrow(Nolabel, Typ.constr(lidentLoc(Lident("unit")), []), propType)
           )
         )
       )
