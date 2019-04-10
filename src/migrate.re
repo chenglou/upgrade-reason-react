@@ -37,192 +37,230 @@ let camelCaseAriaIfExists = (label) => {
   }
 };
 
+let prospectiveComponents: ref(list(string)) = ref([]);
+let prospectiveComponentMakePairs = ref([]);
+let outerStructure = ref(true);
+
+let findFirstComponentLikeReturnValue = (expr) => {
+  /* [arg_label] */
+  let propsList = ref([]);
+  let rec findFirstComponentLikeReturnValueRec = (expr) => {
+    switch (expr) {
+    | {
+      pexp_desc: Pexp_fun(argLabel, _, _, innerExpression)
+    } =>
+      switch (argLabel) {
+      | Labelled(foo) | Optional(foo) => propsList := [argLabel, ...propsList^]
+      | Nolabel => ()
+      };
+      findFirstComponentLikeReturnValueRec(innerExpression)
+    | {
+      pexp_desc: Pexp_let(_, _, innerExpression)
+    } => findFirstComponentLikeReturnValueRec(innerExpression)
+    | {
+      pexp_desc: Pexp_record(_, Some({
+        pexp_desc: Pexp_ident({txt: Lident(txt)})
+      }))
+    } => List.getBy(prospectiveComponents^, (el) => el == txt)
+    | {
+      pexp_desc: Pexp_apply({
+      pexp_desc: Pexp_ident({txt: Lident("wrapJsForReason") | Ldot(_, "wrapJsForReason")})
+    }, _)
+    } => Some("")
+    | _ => None
+    }
+  };
+  let maybeReturnValue = findFirstComponentLikeReturnValueRec(expr);
+  (maybeReturnValue, propsList^);
+};
+
+let lidentLoc = lident => {loc: Location.none, txt: lident};
+
+let safeTypeFromValue = valueStr => switch (String.sub(valueStr, 0, 1)) {
+| "_" => "T" ++ valueStr
+| _ => valueStr
+};
+
+let rec recursivelyMakeNamedArgsForExternal = (list, args) =>
+  switch (list) {
+  | [label, ...tl] =>
+    recursivelyMakeNamedArgsForExternal(
+      tl,
+      Typ.arrow(
+        label,
+        Typ.var(safeTypeFromValue(
+          switch (label) {
+          | Labelled(str)
+          | Optional(str) => str
+          | _ => raise(Invalid_argument("This should never happen."))
+          },
+        )),
+        args,
+      ),
+    )
+  | [] => args
+  };
+
 let refactorMapper = {
   ...default_mapper,
-  module_expr: (mapper, item) => {
+  value_binding: (mapper, item) =>  {
     switch (item) {
-    /* ReactEventRe.UI => ReactEvent.UI */
-    | {pmod_desc: Pmod_ident({loc, txt: Ldot(Lident("ReactEventRe"), eventModuleName)})} =>
-      {...item, pmod_desc: Pmod_ident({loc, txt: Ldot(Lident("ReactEvent"), eventModuleName)})}
-    | _ => default_mapper.module_expr(mapper, item)
-    }
+    | {
+      pvb_pat: {
+        ppat_desc: Ppat_var({txt})
+      },
+      pvb_expr: {
+        pexp_desc: Pexp_apply({
+          pexp_desc: Pexp_ident({txt:
+            Lident("basicComponent") | Lident("statelessComponent") | Lident("statelessComponentWithRetainedProps") | Lident("reducerComponent") | Lident("reducerComponentWithRetainedProps") | 
+            Ldot(_, "basicComponent") | Ldot(_, "statelessComponent") | Ldot(_, "statelessComponentWithRetainedProps") | Ldot(_, "reducerComponent") | Ldot(_, "reducerComponentWithRetainedProps")
+          })
+        }, _)
+      }} => prospectiveComponents := [txt, ...prospectiveComponents^]
+    | {
+        pvb_pat: {
+          ppat_desc: Ppat_var({txt})
+        },
+        pvb_expr: {
+        pexp_desc: Pexp_fun(_, _, _, _)
+      } as expression} => 
+      let (makeForComponent, args) = findFirstComponentLikeReturnValue(expression);
+      switch (makeForComponent) {
+      | Some(component) =>
+        let pairs = List.head(prospectiveComponentMakePairs^);
+        switch (pairs) {
+        | Some(pairs) =>
+          pairs := [(component, txt, args), ...pairs^];
+        | None => ()
+        };
+      | None => ()
+      }
+    | _ => ();
+    };
+    default_mapper.value_binding(mapper, item)
   },
-  structure_item: (mapper, item) => {
-    switch (item) {
-    /* open ReactEventRe => open ReactEvent */
-    | {pstr_desc: Pstr_open({popen_lid: {loc, txt: Lident("ReactEventRe")}} as o)} =>
-      {...item, pstr_desc: Pstr_open({...o, popen_lid: {loc, txt: Lident("ReactEvent")}})}
-    | _ => default_mapper.structure_item(mapper, item)
+  structure: (mapper, item) => {
+    let isOuterStructure = outerStructure^;
+    outerStructure := false;
+    let pairs = ref([]);
+    prospectiveComponentMakePairs := [pairs, ...prospectiveComponentMakePairs^];
+    let mapped = default_mapper.structure(mapper, item);
+    let newStructureItems = List.reduce(List.reverse(pairs^), [], (acc, (component, make, args)) => {
+      List.concat(acc, [
+      Str.value(Nonrecursive, [
+        Vb.mk(
+          ~attrs=[(
+            lidentLoc("ocaml.doc"),
+            PStr([Str.eval(Exp.constant(Const.string(
+              "\n * This is a wrapper created to let this component be used from the new React api.\n * Please convert this component to a [@react.component] function and then remove this wrapping code.\n "
+            )))])
+          )],
+          Pat.var(lidentLoc(make)),
+          Exp.apply(
+            Exp.ident(lidentLoc(Ldot(Lident("ReasonReactCompat"), "wrapReasonReactForReact"))),
+            [
+              (Labelled("component"), switch (component) {
+              | "" => Exp.apply(
+                  Exp.ident(lidentLoc(Ldot(Lident("ReasonReact"), "statelessComponent"))),
+                  [(Nolabel, Exp.constant(Const.string("TemporaryRefactorComponent")))]
+                )
+                | component => Exp.ident(lidentLoc(Lident(component)))
+              }),
+              (Nolabel, Exp.fun_(Nolabel, None, Pat.var(lidentLoc("reactProps")), Exp.apply(
+                Exp.ident(lidentLoc(Lident(make))),
+                List.concat(
+                  List.map(args, (arg) => switch arg {
+                  | Labelled(name) | Optional(name) => (arg, Exp.apply(
+                    Exp.ident(lidentLoc(Lident("##"))),
+                    [
+                      (Nolabel, Exp.ident(lidentLoc(Lident("reactProps")))),
+                      (Nolabel, Exp.ident(lidentLoc(Lident(name))))
+                    ]))
+                  | Nolabel => raise(Invalid_argument("This should not ever happen."))
+                  }),
+                  [
+                    (Nolabel, Exp.apply(
+                    Exp.ident(lidentLoc(Lident("##"))),
+                    [
+                      (Nolabel, Exp.ident(lidentLoc(Lident("reactProps")))),
+                      (Nolabel, Exp.ident(lidentLoc(Lident("children"))))
+                    ]))
+                  ]
+                )
+              )))
+            ]
+          )
+        )
+      ]),
+      Str.primitive(
+        Val.mk(
+          ~attrs=[(lidentLoc("bs.obj"), PStr([]))],
+          ~prim=[""],
+          lidentLoc(make ++ "Props"),
+          recursivelyMakeNamedArgsForExternal(
+            args,
+            Typ.arrow(Nolabel, Typ.constr(lidentLoc(Lident("unit")), []), Typ.constr(
+              lidentLoc(Ldot(Lident("Js"), "t")),
+              [Typ.object_(List.map(args, (arg) => switch (arg) {
+              | Labelled(name) => (name, [], Typ.var(safeTypeFromValue(name)))
+              | Optional(name) => (name, [], Typ.constr(lidentLoc(Lident("option")), [Typ.var(safeTypeFromValue(name))]))
+              | Nolabel => raise(Invalid_argument("This should never happen"))
+              }), Closed)]
+            ))
+          )
+        )
+      )
+      ])
+    });
+    let [_, ...pairs] = prospectiveComponentMakePairs^;
+    prospectiveComponentMakePairs := pairs;
+    let structureItems = List.concat(mapped, newStructureItems);
+    if (isOuterStructure) {
+      List.add(structureItems, Str.attribute((
+        lidentLoc("bs.config"),
+        PStr([Str.eval(Exp.record(
+          [(lidentLoc(Lident("jsx")), Exp.constant(Const.int(3)))],
+          None
+        ))])
+      )));
+    } else {
+      structureItems
     }
   },
   expr: (mapper, item) =>
     switch (item) {
-    /* ReactEventRe.(...) => ReactEvent.(...) */
-    | {pexp_desc: Pexp_open(overrideFlag, {loc, txt: Lident("ReactEventRe")}, e)} =>
-      {...item, pexp_desc: Pexp_open(overrideFlag, {loc, txt: Lident("ReactEvent")}, mapper.expr(mapper, e))}
-    /* ReactEventRe.*._type => ReactEvent.*.type_ */
-    | {pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEventRe"), eventModuleName), "_type")})} =>
-      {...item, pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEvent"), eventModuleName), "type_")})}
-    /* e |> ReactEventRe.Mouse.preventDefault => e->ReactEvent.Mouse.preventDefault */
-    | {pexp_desc: Pexp_apply(
-        {pexp_desc: Pexp_ident({loc, txt: Lident("|>")})} as f,
-        [
-          (Nolabel, e),
-          (Nolabel, {pexp_desc: Pexp_ident({
-            loc: loc2,
-            txt: Ldot(
-              Ldot(Lident("ReactEventRe"), _eventModuleName),
-              _callName
-            )
-          })} as call)
-        ]
-      )} =>
-      {...item, pexp_desc: Pexp_apply(
-        {...f, pexp_desc: Pexp_ident({loc, txt: Lident("|.")})},
-        [(Nolabel, mapper.expr(mapper, e)), (Nolabel, mapper.expr(mapper, call))]
-      )}
-    /* e |> ReactEventRe.Form.target |> ReactDOMRe.domElementToObj => e->ReactEvent.Form.target */
-    /* |--- or anything similar ---| */
-    | {pexp_desc: Pexp_apply(
-        {pexp_desc: Pexp_ident({loc, txt: Lident("|>" | "|.")})} as f,
-        [
-          (Nolabel, e),
-          (Nolabel, {pexp_desc: Pexp_ident({
-            txt: Ldot(Lident("ReactDOMRe"), "domElementToObj"),
-          })})
-        ]
-      )}
-    /* ReactDOMRe.domElementToObj(e |> ReactEventRe.Form.target) => e->ReactEvent.Form.target */
-    /*                            |--- or anything similar ---| */
-    | {pexp_desc: Pexp_apply(
-        {pexp_desc: Pexp_ident({loc, txt: Ldot(Lident("ReactDOMRe"), "domElementToObj")})} as f,
-        [(Nolabel, e)]
-      )} =>
-        switch (e) {
-        | {pexp_desc: Pexp_apply(
-            {pexp_desc: Pexp_ident({loc, txt: Lident("|>" | "|.")})} as f,
-            [
-              (Nolabel, e2),
-              (Nolabel, {pexp_desc: Pexp_ident({
-                loc: loc2,
-                txt: Ldot(Ldot(Lident("ReactEventRe"), eventModuleName), callName),
-              })} as call)
-            ]
-          )} =>
-          {...e, pexp_desc: Pexp_apply(
-            {...f, pexp_desc: Pexp_ident({loc, txt: Lident("|.")})},
-            [
-              (Nolabel, mapper.expr(mapper, e2)),
-              (Nolabel, {...call, pexp_desc: Pexp_ident({
-                loc: loc2,
-                txt: Ldot(Ldot(Lident("ReactEvent"), eventModuleName), callName),
-              })})
-            ]
-          )}
-        | {pexp_desc: Pexp_apply(
-            {pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEventRe"), eventModuleName), callName)})} as f,
-            [(Nolabel, e2)]
-          )} =>
-          {...e, pexp_desc: Pexp_apply(
-            {...f, pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEvent"), eventModuleName), callName)})},
-            [(Nolabel, mapper.expr(mapper, e2))]
-          )}
-        | _ => default_mapper.expr(mapper, item)
-        };
-    /* ReactEventRe => ReactEvent */
-    /* this should be at the end of ReactEventRe codemods, since pattern matching order matters */
-    | {pexp_desc: Pexp_ident({loc, txt: Lident("ReactEventRe")})} =>
-      {...item, pexp_desc: Pexp_ident({loc, txt: Lident("ReactEvent")})}
-    | {pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEventRe"), eventModuleName), call)})} =>
-      {...item, pexp_desc: Pexp_ident({loc, txt: Ldot(Ldot(Lident("ReactEvent"), eventModuleName), call)})}
-
-    /* ([@JSX] div(~_to="a", ~children=foo, ())) => <div to_="a"> ...foo </div> */
-    | {
-        pexp_desc: Pexp_apply({pexp_desc: Pexp_ident({loc, txt: Lident(domTag)})}, [_, ..._] as props),
-        pexp_attributes: [_, ..._] as pexp_attributes
-      }
-      when List.some(pexp_attributes, (({txt}, _)) => txt == "JSX") =>
-      let newProps = List.map(props, ((label, expr)) => {
-        let newLabel = switch (label) {
-        | Labelled("_open") => Labelled("open_")
-        | Labelled("_type") => Labelled("type_")
-        | Labelled("_begin") => Labelled("begin_")
-        | Labelled("_end") => Labelled("end_")
-        | Labelled("_in") => Labelled("in_")
-        | Labelled("_to") => Labelled("to_")
-        | label => label
-        };
-        (newLabel, mapper.expr(mapper, expr))
-      });
-      {...item, pexp_desc: Pexp_apply(Exp.ident({loc, txt: Lident(domTag)}), newProps)}
-
-    /* ReasonReact.createDomElement("div", {"a": b}, bar) => <div ~a="b"> ...bar </div> */
-    | {pexp_desc: Pexp_apply(
-        {pexp_desc: Pexp_ident({loc, txt: Ldot(Lident("ReasonReact"), "createDomElement")})},
-        [
-          (Nolabel, {pexp_desc: Pexp_constant(Pconst_string(domTag, None))}) as tag,
-          (Nolabel, props),
-          (Nolabel, children),
-        ]
-      )} =>
-      let newChildren = mapper.expr(mapper, children);
-      switch (props) {
-      /* if props are like {"a": b} */
-      | {pexp_desc: Pexp_extension((
-          {txt: "bs.obj"},
-          PStr([{pstr_desc: Pstr_eval({pexp_desc: Pexp_record(fields, None)}, attrs)}])
-        ))}
-        when List.every(fields, ((name, value)) => !hasWeirdHyphens(name)) =>
-        /* has some data-foo attributes? Bail and in catch-all branch below */
-        /* otherwise, become <div ~a="b"> ...bar </div> */
-        let newProps = List.map(fields, (({txt}, value)) => {
-          let label = Longident.last(txt) |> camelCaseAriaIfExists;
-          (Labelled(label), mapper.expr(mapper, value))
-        });
-        {
-          ...item,
-          pexp_attributes: [({loc: Location.none, txt: "JSX"}, PStr([])), ...item.pexp_attributes],
-          pexp_desc: Pexp_apply(
-            Exp.ident({loc: Location.none, txt: Lident(domTag)}),
-            newProps @ [(Labelled("children"), newChildren), (Nolabel, unitExpr)]
-          )
-        }
-      /* if props is Js.Obj.empty() */
-      | {pexp_desc: Pexp_apply(
-          {pexp_desc: Pexp_ident({txt: Ldot(Ldot(Lident("Js"), "Obj"), "empty")})},
-          [(Nolabel, {pexp_desc: Pexp_construct({txt: Lident("()")}, None)})]
-        )} =>
-        {
-          ...item,
-          pexp_attributes: [({loc: Location.none, txt: "JSX"}, PStr([])), ...item.pexp_attributes],
-          pexp_desc: Pexp_apply(
-            Exp.ident({loc: Location.none, txt: Lident(domTag)}),
-            [
-              (Labelled("children"), newChildren),
-              (Nolabel, unitExpr)
-            ]
-          )
-        }
-      /* if props is anything else */
-      | e =>
-        /* keep things as ReactDOMRe.createElementVariadic("div", ~props=ReactDOMRe.objToDOMProps({"a": b}), bar) */
-        {
-          ...item,
-          pexp_desc: Pexp_apply(
-            Exp.ident({loc, txt: Ldot(Lident("ReactDOMRe"), "createElementVariadic")}),
-            [
-              tag,
-              (Labelled("props"), Exp.apply(
-                Exp.ident({loc: Location.none, txt: Ldot(Lident("ReactDOMRe"), "objToDOMProps")}),
-                [(Nolabel, mapper.expr(mapper, props))]
-              )),
-              (Nolabel, newChildren),
-            ]
-          )
-        }
-      };
+    /* ReasonReact.string|array|null => React.string|array|null */
+    | {pexp_desc: Pexp_ident({loc, txt: Ldot(Lident("ReasonReact"), ("string" | "array" | "null") as name)})} =>
+      {...item, pexp_desc: Pexp_ident({loc, txt: Ldot(Lident("React"), name)})}
     | anythingElse => default_mapper.expr(mapper, anythingElse)
-    }
+    },
+  value_description: (mapper, valueDescription) => {
+    let isComponent = ref(false);
+    let rec transformType = (coreType) => switch (coreType) {
+    | {ptyp_desc: Ptyp_arrow((Labelled(_) | Optional(_)) as label, paramType, innerType)} =>
+      {...coreType, ptyp_desc: Ptyp_arrow(label, paramType, transformType(innerType))}
+    | {ptyp_desc: Ptyp_arrow(Nolabel, paramType, innerType)} =>
+      {...coreType, ptyp_desc: Ptyp_arrow(Labelled("children"), paramType, transformType(innerType))}
+    | {ptyp_desc: Ptyp_constr({txt: Ldot(Lident("ReasonReact"), "component") | Lident("component")} as loc, typeArguments)} =>
+      isComponent := true;
+      {...coreType, ptyp_desc: Ptyp_constr({...loc, txt: Ldot(Lident("React"), "element")}, [])}
+    | otherType => otherType
+    };
+    let newType = transformType(valueDescription.pval_type);
+    let transformed = if (isComponent^) {
+      {
+        ...valueDescription,
+        pval_attributes: [
+          ({txt: "react.component", loc: valueDescription.pval_loc}, PStr([])),
+          ...valueDescription.pval_attributes
+        ],
+        pval_type: newType,
+      }
+    } else {
+      valueDescription
+    };
+    default_mapper.value_description(mapper, transformed);
+  }
 };
 
 switch (Sys.argv) {
@@ -234,7 +272,7 @@ switch (Sys.argv) {
   let validFiles =
     Array.slice(arguments, ~offset=1, ~len=Array.length(arguments) - 1)
     |. Array.keep(file => {
-      let isReason = Filename.check_suffix(file, ".re");
+      let isReason = Filename.check_suffix(file, ".re") || Filename.check_suffix(file, ".rei");
       if (isReason) {
         if (Sys.file_exists(file)) {
           true
@@ -264,6 +302,11 @@ switch (Sys.argv) {
         formatter,
         (newAst, comments)
         );
+      let _cleanup = {
+        prospectiveComponentMakePairs := [];
+        prospectiveComponents := [];
+        outerStructure := true;
+      };
       Format.print_flush();
       close_out(oc);
     });

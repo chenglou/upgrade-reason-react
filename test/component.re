@@ -1,38 +1,74 @@
-/* ReactEventRe => ReactEvent */
-open ReactEventRe;
-module Foo = ReactEventRe.UI;
-ReactEventRe.Keyboard.stopPropagation(e);
+let component = ReasonReact.statelessComponent("foo");
 
-/* _type => type_ */
-let asd = ReactEventRe.Form._type;
-let asd = ReactEventRe.(ReactEventRe.Form._type);
+let make = (~prop1=1, ~prop2, children) => {
+  ...component,
+  render: _self => <div />,
+};
 
-/* normalize pipe usage for events (avoid bs.send.pipe, deprecated) */
-e |> ReactEventRe.Mouse.preventDefault;
-e -> ReactEventRe.Mouse.preventDefault;
+[@bs.module "fooModule"]
+external component2 : ReasonReact.reactClass = "";
 
-/* remove ReactDOMRe.domElementToObj in these cases + normalize pipe usage like above */
-event |> ReactEventRe.Form.target |> ReactDOMRe.domElementToObj;
-(event |> ReactEventRe.Form.target |> ReactDOMRe.domElementToObj)##value;
-(ReactEventRe.Form.target(event) |> ReactDOMRe.domElementToObj)##value;
-ReactDOMRe.domElementToObj(ReactEventRe.Form.target(event))##value;
+[@bs.deriving abstract]
+type props = {
+  prop1: int,
+  prop2: string,
+  prop3: float
+};
 
-/* don't accidentally transform things like this */
-event |> ReactEventRe.target |> ReactDOMRe.domElementToObj;
+let make2 =
+    (
+      ~prop1,
+      ~prop2=?,
+      ~prop3=Foo.bar,
+      children,
+    ) =>
+  ReasonReact.wrapJsForReason(
+    ~reactClass=component2,
+    ~props=props(~prop1, ~prop2, ~prop3=Foo.convertBar(prop3)),
+    children,
+  );
 
+module Nested = {
+  let make3 =
+    (
+      ~prop1,
+      ~prop2=?,
+      ~prop3=Foo.bar,
+      children,
+    ) =>
+  ReasonReact.wrapJsForReason(
+    ~reactClass=component2,
+    ~props=props(~prop1, ~prop2, ~prop3=Foo.convertBar(prop3)),
+    children,
+  );
+};
 
-/* ReasonReact.createDomElement("div", {"a": b}, bar) => ([@JSX] div(~a=b, ~children=bar, ())) aka <div a=b> ...bar </div> */
-ReasonReact.createDomElement("div", {"a": b, "aria-label": d}, children);
-ReasonReact.createDomElement("div", Js.Obj.empty(), children);
-ReasonReact.createDomElement("div", {"data-foo": ReactEventRe.Keyboard.target}, children);
-ReasonReact.createDomElement("span", props, bar);
-ReasonReact.createDomElement("div", {"a": b, "aria-label": d}, (
-  ReasonReact.createDomElement("div", {"a": b, "onClick": (e) => ReactEventRe.Mouse.preventDefault(e)}, children)
-));
+module Nested = {
+  let make4 =
+    (
+      ~prop1,
+      ~prop2=?,
+      ~prop3=Foo.bar,
+      children,
+    ) =>
+  ReasonReact.wrapJsForReason(
+    ~reactClass=component2,
+    ~props={"prop1": prop1},
+    children,
+  );
+};
 
-/* <div _to="a">foo</div> => <div to_="a">foo</div> */
-<div _to="a" _open="b">foo</div>
-/* don't change random calls */
-div(~_to="a", ~_open="b", ~children=[foo], ());
-/* don't change uppercase JSX calls */
-<Foo _to="a">1</Foo>
+ReasonReact.string("foo");
+ReasonReact.array([|foo|]);
+ReasonReact.null;
+
+module type Nested = {
+  let make5:
+    (
+      ~prop1: string,
+      ~prop2: int=?,
+      ~prop3: string=?,
+      float,
+    ) =>
+    ReasonReact.component(int, string, int);
+};
