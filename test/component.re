@@ -72,3 +72,17 @@ module type Nested = {
     ) =>
     ReasonReact.component(int, string, int);
 };
+
+module Alex = {
+  module One = {
+    let component = ReasonReact.statelessComponent(__MODULE__);
+    let make = children => {
+      ...component,
+      render: _ => <button> ...children </button>,
+    };
+  };
+  module Two = {
+    let component = ReasonReact.statelessComponent(__MODULE__);
+    let make = _ => {...component, render: _ => <Button />};
+  };
+}

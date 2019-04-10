@@ -215,17 +215,7 @@ let refactorMapper = {
     let [_, ...pairs] = prospectiveComponentMakePairs^;
     prospectiveComponentMakePairs := pairs;
     let structureItems = List.concat(mapped, newStructureItems);
-    if (isOuterStructure) {
-      List.add(structureItems, Str.attribute((
-        lidentLoc("bs.config"),
-        PStr([Str.eval(Exp.record(
-          [(lidentLoc(Lident("jsx")), Exp.constant(Const.int(3)))],
-          None
-        ))])
-      )));
-    } else {
-      structureItems
-    }
+    structureItems
   },
   expr: (mapper, item) =>
     switch (item) {
